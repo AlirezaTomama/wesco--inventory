@@ -26,6 +26,20 @@
     position:absolute; bottom:10px; left:10px; background:rgba(46,50,56,0.85); color:var(--concrete);
     font-size:0.72rem; padding:6px 10px; border-radius:4px; line-height:1.5; pointer-events:none;
   }
+  #hoverTip {
+    position:absolute; display:none; background:var(--steel); color:var(--concrete);
+    font-size:0.76rem; padding:8px 11px; border-radius:5px; pointer-events:none; z-index:10;
+    max-width:240px; line-height:1.5; box-shadow:0 3px 10px rgba(0,0,0,0.25);
+  }
+  #hoverTip b { color:var(--amber); }
+
+  .archive-overlay { position:fixed; inset:0; background:rgba(20,22,24,.5); display:none; align-items:center; justify-content:center; z-index:60; padding:16px; }
+  .archive-overlay.show { display:flex; }
+  .archive-panel { background:var(--panel); border:2px solid var(--steel); border-radius:6px; width:100%; max-width:560px; max-height:80vh; overflow-y:auto; padding:22px; }
+  .archive-panel h3 { margin:0 0 12px; }
+  .archive-row { display:flex; justify-content:space-between; gap:10px; font-size:0.82rem; background:var(--concrete-dark); border-radius:3px; padding:8px 12px; margin-bottom:6px; }
+  .archive-row .aid { font-weight:700; text-decoration:line-through; }
+  .archive-row .aloc { color:var(--steel-soft); font-size:0.72rem; }
 
   #sidebar { width:320px; background:var(--panel); border-left:2px solid var(--steel); display:flex; flex-direction:column; overflow-y:auto; }
   .sb-header { padding:14px 16px; border-bottom:2px solid var(--steel); }
@@ -116,7 +130,8 @@
 <body>
 <div id="app">
   <div id="canvasWrap">
-    <div class="hint">Drag to rotate &middot; Scroll to zoom &middot; Right-drag to pan &middot; Click a rack to select it &middot; Click a level/bin to open it</div>
+    <div class="hint">Drag to rotate &middot; Scroll to zoom &middot; Right-drag to pan &middot; <b>Hover</b> a box for its info &middot; <b>Click</b> an empty or filled slot to edit it</div>
+    <div id="hoverTip"></div>
   </div>
   <div id="sidebar">
     <div class="sb-header">
@@ -126,6 +141,7 @@
 
     <div class="sb-section">
       <button class="btn" id="btnAddRack">+ Add Rack</button>
+      <button class="btn secondary" id="btnArchive" style="margin-top:8px;">View Removal Archive</button>
     </div>
 
     <div class="sb-section">
@@ -211,6 +227,7 @@
         <div><label>Date</label><input id="newRecvDate" type="date"></div>
       </div>
       <div class="add-item-error" id="addItemError"></div>
+      <div class="slot-ref" id="statRef" style="margin-top:10px;"></div>
       <div class="history-section" id="historySection"></div>
     </div>
 
@@ -219,6 +236,15 @@
       <button class="btn-clear-item" id="btnClearItem">Clear all</button>
       <button class="btn-save" id="btnSave">Save</button>
     </div>
+  </div>
+</div>
+
+<!-- ===== Removal Archive modal ===== -->
+<div class="archive-overlay" id="archiveOverlay">
+  <div class="archive-panel">
+    <h3>Removal Archive — all racks</h3>
+    <div id="archiveList"></div>
+    <button class="btn secondary" id="btnCloseArchive" style="margin-top:14px;">Close</button>
   </div>
 </div>
 
@@ -417,6 +443,7 @@ function getSlotForBin(rack, levelIdx1) {
 // ================= 3D RACK MESH BUILDING =================
 let rackGroups = {};
 let clickableBinMeshes = []; // {mesh, rackId, level, binIdx, isSkid}
+let itemBoxMeshes = []; // real item box meshes, for hover tooltip
 
 function buildRackMesh(rack) {
   const group = new THREE.Group();
@@ -476,7 +503,9 @@ function buildRackMesh(rack) {
         const boxMat = new THREE.MeshStandardMaterial({ color: itemColor(0) });
         const box = new THREE.Mesh(boxGeo, boxMat);
         box.position.set(binX, yCursor + boxH/2, 0);
+        box.userData.itemInfo = { id: binData.id, w: rack.w, h: binData.h, d: rack.d, receivedBy: binData.receivedBy, receivedDate: binData.receivedDate, rackName: rack.name, level, binIdx: b };
         group.add(box);
+        itemBoxMeshes.push(box);
       } else if (lvl.type !== 'skid' && hasContent) {
         const slot = getSlotForBin(rack, level);
         const heightItems = binData.items.filter(it => (it.stackAxis||'height')==='height');
@@ -492,7 +521,9 @@ function buildRackMesh(rack) {
           const mat = new THREE.MeshStandardMaterial({ color: itemColor(binData.items.indexOf(it)) });
           const box = new THREE.Mesh(geo, mat);
           box.position.set(binX, yCursor + hy + bh/2, -rack.d/2 + bd/2);
+          box.userData.itemInfo = { id: it.id, w: it.w, h: it.h, d: it.d, receivedBy: it.receivedBy, receivedDate: it.receivedDate, rackName: rack.name, level, binIdx: b };
           group.add(box);
+          itemBoxMeshes.push(box);
           hy += it.h;
         });
         // behind (depth) stack: placed further back in Z, one after another
@@ -505,6 +536,8 @@ function buildRackMesh(rack) {
           const mat = new THREE.MeshStandardMaterial({ color: itemColor(binData.items.indexOf(it)) });
           const box = new THREE.Mesh(geo, mat);
           box.position.set(binX, yCursor + bh/2, dz + bd/2);
+          box.userData.itemInfo = { id: it.id, w: it.w, h: it.h, d: it.d, receivedBy: it.receivedBy, receivedDate: it.receivedDate, rackName: rack.name, level, binIdx: b };
+          itemBoxMeshes.push(box);
           group.add(box);
           dz += it.d;
         });
@@ -533,6 +566,7 @@ function rebuildScene() {
   Object.values(rackGroups).forEach(g => scene.remove(g));
   rackGroups = {};
   clickableBinMeshes = [];
+  itemBoxMeshes = [];
   racks.forEach(rack => {
     const g = buildRackMesh(rack);
     scene.add(g);
@@ -583,6 +617,45 @@ canvasEl.addEventListener('mouseup', (e) => {
     openBinPanel(ud.rackId, ud.level, ud.binIdx, ud.isSkid);
   }
 });
+
+// Hover: cursor feedback for clickable bins + tooltip with item info
+const hoverTip = document.getElementById('hoverTip');
+canvasEl.addEventListener('mousemove', (e) => {
+  if (isDragging || isPanning) { hoverTip.style.display = 'none'; return; }
+  const rect = canvasEl.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+
+  // item box hover (higher priority, shows detailed info)
+  const itemHits = raycaster.intersectObjects(itemBoxMeshes, false);
+  if (itemHits.length > 0) {
+    const info = itemHits[0].object.userData.itemInfo;
+    canvasEl.style.cursor = 'pointer';
+    const recv = info.receivedBy ? `Received by <b>${info.receivedBy}</b>${info.receivedDate?' on '+info.receivedDate:''}` : 'No receiving info on file';
+    hoverTip.innerHTML = `<b>${info.id}</b><br>${info.w}\u00d7${info.h}\u00d7${info.d}cm<br>${recv}<br><span style="color:#B0AC9C;">${info.rackName} \u2014 Level ${info.level}, Bin ${info.binIdx}</span>`;
+    hoverTip.style.left = (e.clientX - rect.left + 14) + 'px';
+    hoverTip.style.top = (e.clientY - rect.top + 14) + 'px';
+    hoverTip.style.display = 'block';
+    return;
+  }
+
+  // bin hover (lower priority, just shows it's clickable)
+  const binHits = raycaster.intersectObjects(clickableBinMeshes, false);
+  if (binHits.length > 0) {
+    canvasEl.style.cursor = 'pointer';
+    const ud = binHits[0].object.userData;
+    hoverTip.innerHTML = `Level ${ud.level}, Bin ${ud.binIdx} \u2014 <span style="color:#B0AC9C;">click to ${ud.isSkid ? 'add/edit skid' : 'add/edit boxes'}</span>`;
+    hoverTip.style.left = (e.clientX - rect.left + 14) + 'px';
+    hoverTip.style.top = (e.clientY - rect.top + 14) + 'px';
+    hoverTip.style.display = 'block';
+    return;
+  }
+
+  canvasEl.style.cursor = 'grab';
+  hoverTip.style.display = 'none';
+});
+canvasEl.addEventListener('mouseleave', () => { hoverTip.style.display = 'none'; });
 
 // ================= SIDEBAR UI =================
 function renderSidebar() {
@@ -690,6 +763,24 @@ function moveItemInAxis(idx, dir) {
   renderItemList();
 }
 
+function renderBinStats() {
+  const rack = racks.find(r => r.id === activeRackId);
+  if (!rack || activeIsSkid) { document.getElementById('statRef').innerHTML=''; return; }
+  const slot = getSlotForBin(rack, activeLevel);
+  const st = smallBoxBinStats(draftItems, slot);
+  let html = `Volume used: <b>${st.usedPct}%</b> &nbsp;|&nbsp; `+
+    `H: <b>${st.sumH}/${slot.h}cm</b> (dead ${st.deadH}) &nbsp;|&nbsp; `+
+    `D: <b>${st.sumD}/${slot.d}cm</b> (dead ${st.deadD}) &nbsp;|&nbsp; `+
+    `W widest: <b>${st.maxW}/${slot.w.toFixed(0)}cm</b> (dead ${st.deadW.toFixed(0)})`;
+  if (st.remainingD > 0) {
+    html += `<br><span style="color:#4C7A5E; font-weight:600;">\u2713 ${st.remainingD}cm of depth still free \u2014 room for another item up to ${slot.w.toFixed(0)}\u00d7${slot.h}cm.</span>`;
+  }
+  if (st.overH || st.overD || st.overW) {
+    html += `<br><span style="color:#C4177C; font-weight:700;">\u26a0 Doesn't fit \u2014 remove or resize something.</span>`;
+  }
+  document.getElementById('statRef').innerHTML = html;
+}
+
 function renderItemList() {
   const wrap = document.getElementById('itemList');
   wrap.innerHTML = '';
@@ -726,6 +817,7 @@ function renderItemList() {
   });
   if (draftItems.length===0) wrap.innerHTML = '<div style="font-size:0.78rem; color:var(--steel-soft);">No items yet — add one below.</div>';
   renderHistorySection();
+  renderBinStats();
 }
 function renderHistorySection() {
   const wrap = document.getElementById('historySection');
@@ -844,6 +936,54 @@ document.getElementById('btnSave').addEventListener('click', () => {
 document.getElementById('btnClearItem').addEventListener('click', () => {
   if (activeIsSkid) { document.getElementById('skidId').value=''; document.getElementById('skidH').value=''; }
   else { draftItems=[]; renderItemList(); }
+});
+
+// ================= REMOVAL ARCHIVE (global, across all racks/bins) =================
+function collectAllRemovals() {
+  const rows = [];
+  racks.forEach(rack => {
+    const rackData = binState[rack.id] || {};
+    Object.entries(rackData).forEach(([key, data]) => {
+      if (data && data.history && data.history.length) {
+        const [, levelPart, binPart] = key.match(/L(\d+)-B(\d+)/) || [];
+        data.history.forEach(h => {
+          rows.push({ ...h, rackName: rack.name, level: levelPart, binIdx: binPart });
+        });
+      }
+    });
+  });
+  // most recent removal first
+  rows.sort((a,b) => (b.removedDate||'').localeCompare(a.removedDate||''));
+  return rows;
+}
+
+function renderArchive() {
+  const rows = collectAllRemovals();
+  const wrap = document.getElementById('archiveList');
+  if (rows.length === 0) {
+    wrap.innerHTML = '<div class="empty-note">No items have been removed yet.</div>';
+    return;
+  }
+  wrap.innerHTML = rows.map(r => `
+    <div class="archive-row">
+      <div>
+        <span class="aid code">${r.id}</span> — ${r.w}×${r.h}×${r.d}cm
+        <div class="aloc">${r.rackName} — Level ${r.level}, Bin ${r.binIdx}</div>
+      </div>
+      <div style="text-align:right; white-space:nowrap;">removed by <b>${r.removedBy}</b><br>${r.removedDate}</div>
+    </div>
+  `).join('');
+}
+
+document.getElementById('btnArchive').addEventListener('click', () => {
+  renderArchive();
+  document.getElementById('archiveOverlay').classList.add('show');
+});
+document.getElementById('btnCloseArchive').addEventListener('click', () => {
+  document.getElementById('archiveOverlay').classList.remove('show');
+});
+document.getElementById('archiveOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'archiveOverlay') document.getElementById('archiveOverlay').classList.remove('show');
 });
 
 // ================= RENDER LOOP =================
