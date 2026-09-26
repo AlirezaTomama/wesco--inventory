@@ -3,126 +3,88 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Yard & Rack Locator</title>
+<title>Warehouse 3D Floor Plan</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
   :root {
     --concrete: #EDEBE4; --concrete-dark: #E1DED4; --steel: #2E3238; --steel-soft: #565C64;
     --line: #C9C5B8; --amber: #D98E2B; --amber-dark: #B5731E;
-    --occupied: #4C7A5E; --occupied-fill: rgba(76,122,94,0.28);
-    --occupied2: #3D6B93; --occupied2-fill: rgba(61,107,147,0.28);
-    --dead: #C9622A; --dead-fill: rgba(201,98,42,0.22);
-    --empty-fill: rgba(255,255,255,0.35);
-    --highlight: #C4177C; --highlight-glow: rgba(196,23,124,0.35);
-    --dim: 0.16; --panel: #FBFAF7; --radius: 3px; box-sizing: border-box;
+    --occupied: #4C7A5E; --occupied2: #3D6B93; --dead: #C9622A; --dead-fill: rgba(201,98,42,0.22);
+    --panel: #FBFAF7; --highlight: #C4177C; box-sizing: border-box;
   }
   * { box-sizing: inherit; }
-  html, body { margin:0; height:100%; background:var(--concrete); font-family:'Segoe UI','Inter',system-ui,-apple-system,sans-serif; color:var(--steel); }
+  html, body { margin:0; height:100%; background:var(--concrete); font-family:'Segoe UI','Inter',system-ui,-apple-system,sans-serif; color:var(--steel); overflow:hidden; }
   body { padding-top: env(safe-area-inset-top,0px); padding-bottom: env(safe-area-inset-bottom,0px); }
   .code { font-family:'SF Mono','Consolas','Roboto Mono',monospace; }
-  .wrap { max-width:1180px; margin:0 auto; padding:28px 20px 60px; }
-  header { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; border-bottom:3px solid var(--steel); padding-bottom:14px; margin-bottom:22px; flex-wrap:wrap; }
-  h1 { margin:0; font-size:1.5rem; font-weight:700; color:var(--steel); }
-  .subtitle { margin:4px 0 0; font-size:0.88rem; color:var(--steel-soft); }
-  .search-block { display:flex; gap:8px; align-items:center; }
-  #search { font-family:inherit; font-size:0.95rem; padding:9px 14px; border:2px solid var(--steel); border-radius:var(--radius); background:var(--panel); width:220px; outline:none; }
-  #search:focus { border-color:var(--amber-dark); }
-  #searchBtn, #clearBtn, #editSetupBtn { font-family:inherit; font-size:0.88rem; font-weight:600; padding:9px 16px; border-radius:var(--radius); border:2px solid var(--steel); background:var(--steel); color:var(--concrete); cursor:pointer; }
-  #clearBtn, #editSetupBtn { background:transparent; color:var(--steel); }
-  #searchBtn:hover { background:var(--amber-dark); border-color:var(--amber-dark); }
-  #clearBtn:hover, #editSetupBtn:hover { background:var(--concrete-dark); }
-  #searchMsg { font-size:0.85rem; margin:10px 0 18px; min-height:1.2em; }
-  #searchMsg.found { color:var(--occupied); font-weight:600; }
-  #searchMsg.empty-hit { color:var(--steel-soft); }
-  #searchMsg.notfound { color:var(--highlight); font-weight:600; }
-  .legend { display:flex; gap:20px; flex-wrap:wrap; font-size:0.8rem; color:var(--steel-soft); margin-bottom:8px; }
-  .legend span { display:inline-flex; align-items:center; gap:6px; }
-  .swatch { width:14px; height:14px; border-radius:2px; display:inline-block; border:1.5px solid var(--steel); }
-  .summary-bar { display:flex; gap:18px; flex-wrap:wrap; font-size:0.82rem; background:var(--panel); border:1.5px solid var(--line); border-radius:4px; padding:10px 14px; margin-bottom:20px; }
-  .summary-bar b { color:var(--steel); }
-  .summary-bar .dead-stat { color:var(--dead); font-weight:700; }
 
-  /* Setup screen */
-  .setup-card { background:var(--panel); border:2px solid var(--steel); border-radius:6px; padding:24px; max-width:680px; margin:0 auto; }
-  .setup-card h2 { margin:0 0 4px; font-size:1.15rem; }
-  .setup-note { font-size:0.82rem; color:var(--steel-soft); margin-bottom:16px; }
+  #app { display:flex; height:100vh; height:100dvh; }
+  #canvasWrap { flex:1; position:relative; }
+  #canvasWrap canvas { display:block; width:100%; height:100%; cursor:grab; }
+  #canvasWrap canvas:active { cursor:grabbing; }
 
-  .rack-tabs { display:flex; gap:6px; margin-bottom:18px; border-bottom: 2px solid var(--line); }
-  .rack-tab {
-    font-family:inherit; font-weight:700; font-size:0.9rem; padding:9px 18px;
-    border:none; background:transparent; color:var(--steel-soft); cursor:pointer;
-    border-bottom: 3px solid transparent; margin-bottom:-2px;
+  .hint {
+    position:absolute; bottom:10px; left:10px; background:rgba(46,50,56,0.85); color:var(--concrete);
+    font-size:0.72rem; padding:6px 10px; border-radius:4px; line-height:1.5; pointer-events:none;
   }
-  .rack-tab.active { color:var(--steel); border-bottom-color: var(--amber-dark); }
-  .rack-tab .check { color: var(--occupied); margin-left:4px; }
 
-  .dims3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:18px; }
-  .dims3 .field label { display:block; font-size:0.72rem; font-weight:600; color:var(--steel-soft); margin-bottom:4px; }
-  .dims3 .field input { width:100%; font-family:inherit; font-size:0.92rem; padding:8px 10px; border:1.5px solid var(--steel-soft); border-radius:3px; }
+  #sidebar { width:320px; background:var(--panel); border-left:2px solid var(--steel); display:flex; flex-direction:column; overflow-y:auto; }
+  .sb-header { padding:14px 16px; border-bottom:2px solid var(--steel); }
+  .sb-header h1 { margin:0; font-size:1.1rem; }
+  .sb-header p { margin:4px 0 0; font-size:0.76rem; color:var(--steel-soft); }
 
-  .level-plan-row { display:flex; align-items:center; gap:10px; background:var(--concrete-dark); border-radius:3px; padding:8px 10px; margin-bottom:6px; font-size:0.83rem; }
-  .level-plan-row .idx { font-weight:700; width:22px; color:var(--steel-soft); }
-  .level-plan-row .typebadge { font-size:0.68rem; font-weight:700; padding:2px 7px; border-radius:10px; }
-  .level-plan-row .typebadge.small { background:rgba(76,122,94,0.2); color:var(--occupied); }
-  .level-plan-row .typebadge.skid { background:rgba(217,142,43,0.25); color:var(--amber-dark); }
-  .level-plan-row .htxt { flex:1; }
-  .level-plan-row .rm { background:transparent; border:none; color:var(--highlight); cursor:pointer; font-size:1rem; }
+  .sb-section { padding:14px 16px; border-bottom:1px dashed var(--line); }
+  .sb-section h2 { margin:0 0 8px; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.02em; color:var(--amber-dark); }
 
-  .add-level-row { display:grid; grid-template-columns: 1fr 1fr auto; gap:8px; margin:14px 0 8px; align-items:end; }
-  .add-level-row label { display:block; font-size:0.72rem; font-weight:600; color:var(--steel-soft); margin-bottom:4px; }
-  .add-level-row select, .add-level-row input { width:100%; font-family:inherit; font-size:0.88rem; padding:8px 9px; border:1.5px solid var(--steel-soft); border-radius:3px; }
-  .btn-add-level { font-family:inherit; font-weight:700; font-size:0.85rem; padding:9px 12px; border-radius:3px; border:2px solid var(--steel); background:var(--steel); color:var(--concrete); cursor:pointer; }
-  .btn-add-level:disabled { opacity:0.4; cursor:not-allowed; }
+  .btn { font-family:inherit; font-weight:700; font-size:0.85rem; padding:9px 12px; border-radius:3px; border:2px solid var(--steel); background:var(--steel); color:var(--concrete); cursor:pointer; width:100%; }
+  .btn:hover { background:var(--amber-dark); border-color:var(--amber-dark); }
+  .btn.secondary { background:transparent; color:var(--steel); }
+  .btn.secondary:hover { background:var(--concrete-dark); }
+  .btn.danger { background:transparent; color:var(--highlight); border-color:var(--highlight); }
+  .btn.danger:hover { background:rgba(196,23,124,0.08); }
 
-  .height-meter { height:8px; border-radius:4px; background:var(--concrete-dark); overflow:hidden; margin:6px 0 4px; border:1px solid var(--line); }
-  .height-meter-fill { height:100%; background:var(--occupied); }
-  .height-meter-fill.over { background:var(--highlight); }
-  .height-readout { font-size:0.76rem; color:var(--steel-soft); margin-bottom:14px; }
-  .height-readout b { color:var(--steel); }
-  .height-readout .over-txt { color:var(--highlight); font-weight:700; }
+  .rack-list-item {
+    display:flex; align-items:center; justify-content:space-between; gap:6px;
+    padding:8px 10px; border-radius:3px; background:var(--concrete-dark); margin-bottom:6px; cursor:pointer; font-size:0.82rem;
+  }
+  .rack-list-item.selected { outline:2px solid var(--amber-dark); background:#f2e3cc; }
+  .rack-list-item .rname { font-weight:700; }
+  .rack-list-item .rdims { font-size:0.68rem; color:var(--steel-soft); }
 
-  .copy-row { margin-bottom: 14px; }
-  .copy-row select, .copy-row button { font-family:inherit; font-size:0.8rem; padding:6px 10px; border-radius:3px; border:1.5px solid var(--steel-soft); background:var(--panel); cursor:pointer; }
-  .copy-row button { border-color: var(--steel); background: var(--concrete-dark); font-weight:600; }
+  .field { margin-bottom:10px; }
+  .field label { display:block; font-size:0.72rem; font-weight:600; color:var(--steel-soft); margin-bottom:3px; }
+  .field input, .field select { width:100%; font-family:inherit; font-size:0.85rem; padding:7px 9px; border:1.5px solid var(--steel-soft); border-radius:3px; }
+  .field-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .field-row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
 
-  .btn-build { width:100%; font-family:inherit; font-weight:700; font-size:0.95rem; padding:13px; border-radius:4px; border:2px solid var(--steel); background:var(--steel); color:var(--concrete); cursor:pointer; margin-top:10px; }
-  .btn-build:hover:not(:disabled) { background:var(--amber-dark); border-color:var(--amber-dark); }
-  .btn-build:disabled { opacity:0.4; cursor:not-allowed; }
-  .build-note { font-size:0.76rem; color:var(--steel-soft); margin-top:8px; text-align:center; }
+  .level-row {
+    display:flex; align-items:center; gap:6px; font-size:0.76rem;
+    background:var(--concrete-dark); border-radius:3px; padding:5px 8px; margin-bottom:4px;
+  }
+  .level-row .lbadge { font-size:0.62rem; font-weight:700; padding:1px 6px; border-radius:8px; }
+  .level-row .lbadge.small { background:rgba(76,122,94,0.2); color:#4C7A5E; }
+  .level-row .lbadge.skid { background:rgba(217,142,43,0.25); color:var(--amber-dark); }
+  .level-row .ltxt { flex:1; }
+  .level-row .rm { background:transparent; border:none; color:var(--highlight); cursor:pointer; font-size:0.9rem; }
 
-  .rack-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:18px; }
-  .rack { background:var(--panel); border:2px solid var(--steel); border-radius:4px; overflow:hidden; }
-  .rack-label { background:var(--steel); color:var(--concrete); font-weight:700; font-size:0.95rem; padding:6px 10px; display:flex; justify-content:space-between; align-items:baseline; }
-  .rack-label .fill-pct { font-size:0.72rem; font-weight:500; color:var(--amber); }
-  .rack-dims { font-size:0.66rem; color:var(--steel-soft); padding:4px 10px; background:var(--concrete-dark); }
-  .level { border-top:1px dashed var(--line); padding:8px; }
-  .level:first-child { border-top:none; }
-  .level-label { font-size:0.68rem; color:var(--steel-soft); margin-bottom:5px; display:flex; justify-content:space-between; }
-  .level-label .tag { color:var(--amber-dark); font-weight:700; }
-  .bins { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
-  .bins.skid-row { grid-template-columns:1fr; }
-  .bin { border:1.5px solid var(--steel-soft); border-radius:2px; position:relative; cursor:pointer; background:var(--empty-fill); transition:transform .12s ease, box-shadow .12s ease, opacity .25s ease; overflow:hidden; display:flex; flex-direction:column; }
-  .bin.skid { flex-direction:row; }
-  .bin:hover { transform:scale(1.05); z-index:2; }
-  .bin.occupied { border-color:var(--occupied); }
-  .stackband { width:100%; border-top:1.5px solid var(--panel); flex-shrink:0; opacity:0.55; }
-  .skid-fill { height:100%; background:var(--occupied-fill); border-right:2px solid var(--occupied); flex-shrink:0; }
-  .skid-dead { height:100%; background:repeating-linear-gradient(45deg,var(--dead-fill),var(--dead-fill) 4px,transparent 4px,transparent 8px); }
-  .bin .tip { position:absolute; bottom:100%; left:50%; transform:translateX(-50%); background:var(--steel); color:var(--concrete); font-size:0.62rem; padding:3px 7px; border-radius:3px; white-space:pre-line; text-align:left; opacity:0; pointer-events:none; transition:opacity .1s; margin-bottom:4px; z-index:5; line-height:1.4; max-width:180px; }
-  .bin:hover .tip { opacity:1; }
-  .bin.dimmed { opacity:var(--dim); }
-  .bin.hit { border-color:var(--highlight)!important; border-width:2.5px; box-shadow:0 0 0 3px var(--highlight-glow); animation:pulse 1.1s ease-in-out infinite; z-index:3; }
-  @keyframes pulse { 0%,100%{box-shadow:0 0 0 2px var(--highlight-glow);} 50%{box-shadow:0 0 0 6px var(--highlight-glow);} }
-  .overlay { position:fixed; inset:0; background:rgba(20,22,24,.45); display:none; align-items:center; justify-content:center; z-index:20; padding:16px; overflow-y:auto; }
+  .add-level-row { display:grid; grid-template-columns:1.2fr 1fr auto; gap:6px; margin-top:6px; align-items:end; }
+  .empty-note { font-size:0.8rem; color:var(--steel-soft); text-align:center; padding:20px 10px; }
+
+  .color-swatch-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
+  .color-swatch { width:20px; height:20px; border-radius:3px; cursor:pointer; border:2px solid transparent; }
+  .color-swatch.selected { border-color:var(--steel); }
+
+  /* ===== Bin edit panel (ported from 2D tool) ===== */
+  .overlay { position:fixed; inset:0; background:rgba(20,22,24,.45); display:none; align-items:center; justify-content:center; z-index:50; padding:16px; overflow-y:auto; }
   .overlay.show { display:flex; }
-  .panel { background:var(--panel); border:2px solid var(--steel); border-radius:6px; width:100%; max-width:460px; padding:22px; margin:auto; }
-  .panel h3 { margin:0 0 4px; font-size:1.05rem; }
-  .panel .loc { font-size:0.8rem; color:var(--steel-soft); margin-bottom:14px; }
+  .binpanel { background:var(--panel); border:2px solid var(--steel); border-radius:6px; width:100%; max-width:460px; padding:22px; margin:auto; }
+  .binpanel h3 { margin:0 0 4px; font-size:1.05rem; }
+  .binpanel .loc { font-size:0.8rem; color:var(--steel-soft); margin-bottom:14px; }
   .slot-ref { font-size:0.76rem; background:var(--concrete-dark); border-radius:3px; padding:7px 10px; margin-bottom:14px; color:var(--steel-soft); }
   .slot-ref b { color:var(--steel); }
-  .field { margin-bottom:12px; }
-  .field label { display:block; font-size:0.75rem; font-weight:600; color:var(--steel-soft); margin-bottom:4px; }
-  .field input { width:100%; font-family:inherit; font-size:0.92rem; padding:8px 10px; border:1.5px solid var(--steel-soft); border-radius:3px; outline:none; }
-  .field input:focus { border-color:var(--amber-dark); }
+  .bfield { margin-bottom:12px; }
+  .bfield label { display:block; font-size:0.75rem; font-weight:600; color:var(--steel-soft); margin-bottom:4px; }
+  .bfield input { width:100%; font-family:inherit; font-size:0.92rem; padding:8px 10px; border:1.5px solid var(--steel-soft); border-radius:3px; outline:none; }
+  .bfield input:focus { border-color:var(--amber-dark); }
   .item-list { margin: 10px 0; }
   .item-row { display:flex; align-items:center; gap:8px; font-size:0.8rem; background:var(--concrete-dark); border-radius:3px; padding:7px 9px; margin-bottom:6px; }
   .item-row .swatch-sm { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
@@ -141,18 +103,7 @@
   .add-item-row { display:grid; grid-template-columns: 1.4fr 1fr 1fr 1fr auto; gap:6px; align-items:end; margin-top:8px; }
   .add-item-row label { font-size:0.68rem; color:var(--steel-soft); display:block; margin-bottom:3px; }
   .add-item-row input { width:100%; font-family:inherit; font-size:0.85rem; padding:6px 7px; border:1.5px solid var(--steel-soft); border-radius:3px; }
-  .btn-add { font-family:inherit; font-weight:700; font-size:0.85rem; padding:7px 10px; border-radius:3px; border:2px solid var(--steel); background:var(--steel); color:var(--concrete); cursor:pointer; }
-  .btn-add:hover { background:var(--amber-dark); border-color:var(--amber-dark); }
   .stack-note { font-size:0.72rem; color:var(--steel-soft); margin: 2px 0 4px; }
-  .viz-box { margin:14px 0; border:1.5px dashed var(--line); border-radius:4px; padding:10px; background:var(--concrete-dark); }
-  .viz-label { font-size:0.7rem; color:var(--steel-soft); margin-bottom:8px; }
-  .viz-frame { position:relative; margin:0 auto; background:var(--panel); border:2px solid var(--steel-soft); border-radius:2px; overflow:hidden; display:flex; flex-direction:column; }
-  .viz-band { width:100%; flex-shrink:0; border-top:1.5px solid var(--panel); display:flex; align-items:center; justify-content:center; font-size:0.6rem; color:#fff; overflow:hidden; }
-  .viz-skid-fill { position:absolute; bottom:0; left:0; width:100%; background:var(--occupied-fill); border-top:2px solid var(--occupied); }
-  .viz-skid-dead { position:absolute; top:0; left:0; width:100%; background:repeating-linear-gradient(45deg,var(--dead-fill),var(--dead-fill) 4px,transparent 4px,transparent 8px); }
-  .stat-row { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; font-size:0.78rem; margin-top:8px; }
-  .stat-row .ok { color:var(--occupied); font-weight:700; }
-  .stat-row .warn { color:var(--dead); font-weight:700; }
   .panel-actions { display:flex; gap:8px; margin-top:16px; }
   .panel-actions button { flex:1; font-family:inherit; font-weight:600; font-size:0.85rem; padding:10px; border-radius:3px; cursor:pointer; border:2px solid var(--steel); }
   .btn-save { background:var(--steel); color:var(--concrete); }
@@ -160,115 +111,94 @@
   .btn-clear-item { background:transparent; color:var(--highlight); border-color:var(--highlight); }
   .btn-clear-item:hover { background:rgba(196,23,124,0.08); }
   .btn-cancel { background:transparent; color:var(--steel-soft); border-color:var(--line); flex:0 0 auto; padding:10px 14px; }
-  footer { margin-top:28px; font-size:0.76rem; color:var(--steel-soft); border-top:1px solid var(--line); padding-top:12px; }
-  .hidden { display:none !important; }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --concrete:#202225; --concrete-dark:#2A2C30; --steel:#ECEAE3; --steel-soft:#9A9D9F; --line:#3A3D42; --panel:#2A2C30; --empty-fill:rgba(255,255,255,0.05); }
-    :root:not([data-theme="light"]) .rack-label { color:#202225; }
-    :root:not([data-theme="light"]) #searchBtn { color:#202225; }
-    :root:not([data-theme="light"]) .btn-build { color:#202225; }
-  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div>
-      <h1>Yard &amp; Rack Locator</h1>
-      <p class="subtitle" id="headerSubtitle">Step 1 &mdash; configure each rack separately</p>
-    </div>
-    <div class="search-block hidden" id="searchBlock">
-      <button id="editSetupBtn">Edit rack setup</button>
-      <input id="search" type="text" placeholder="Search SKU or bin" autocomplete="off">
-      <button id="searchBtn">Locate</button>
-      <button id="clearBtn">Clear</button>
-    </div>
-  </header>
-
-  <!-- ===== SETUP SCREEN ===== -->
-  <div id="setupScreen">
-    <div class="setup-card">
-      <h2>Define each rack</h2>
-      <p class="setup-note">Racks are configured independently &mdash; each can have its own width, depth, height, and its own set of levels. Use <b>+ Add rack</b> to add as many racks as you need, or the ✕ next to a tab to remove one.</p>
-
-      <div class="rack-tabs" id="rackTabs"></div>
-
-      <div class="dims3">
-        <div class="field"><label>Rack width (cm)</label><input id="rackW" type="number" min="10"></div>
-        <div class="field"><label>Rack depth (cm)</label><input id="rackD" type="number" min="10"></div>
-        <div class="field"><label>Rack total height (cm)</label><input id="rackH" type="number" min="10"></div>
-      </div>
-
-      <div class="copy-row">
-        <label style="font-size:0.76rem; color:var(--steel-soft); margin-right:6px;">Copy level plan from:</label>
-        <select id="copyFromSelect"></select>
-        <button id="btnCopyFrom" type="button">Copy to this rack</button>
-      </div>
-
-      <div id="levelPlanList"></div>
-
-      <div class="height-meter"><div class="height-meter-fill" id="heightMeterFill"></div></div>
-      <div class="height-readout" id="heightReadout"></div>
-
-      <div class="add-level-row">
-        <div>
-          <label>Level type</label>
-          <select id="newLevelType">
-            <option value="small">Small box (4 bins)</option>
-            <option value="skid">Skid (1 full-width slot)</option>
-          </select>
-        </div>
-        <div>
-          <label>Level height (cm)</label>
-          <input id="newLevelH" type="number" min="1" placeholder="e.g. 30">
-        </div>
-        <button class="btn-add-level" id="btnAddLevel" type="button">+ Add level</button>
-      </div>
-
-      <button class="btn-build" id="btnBuild">Build all racks</button>
-      <div class="build-note" id="buildNote"></div>
-    </div>
+<div id="app">
+  <div id="canvasWrap">
+    <div class="hint">Drag to rotate &middot; Scroll to zoom &middot; Right-drag to pan &middot; Click a rack to select it &middot; Click a level/bin to open it</div>
   </div>
-
-  <!-- ===== MAIN GRID SCREEN ===== -->
-  <div id="mainScreen" class="hidden">
-    <div id="searchMsg"></div>
-    <div class="legend">
-      <span><span class="swatch" style="background:var(--occupied-fill); border-color:var(--occupied);"></span> Item 1 / odd</span>
-      <span><span class="swatch" style="background:var(--occupied2-fill); border-color:var(--occupied2);"></span> Item 2 / even</span>
-      <span><span class="swatch" style="background:var(--dead-fill); border-color:var(--dead);"></span> Dead space</span>
-      <span><span class="swatch" style="background:var(--empty-fill);"></span> Empty</span>
+  <div id="sidebar">
+    <div class="sb-header">
+      <h1>Warehouse 3D Floor Plan</h1>
+      <p>Add racks, position them, then click any bin to edit its contents.</p>
     </div>
-    <div class="summary-bar" id="summaryBar"></div>
-    <div class="rack-grid" id="rackGrid"></div>
-    <footer id="footerText"></footer>
+
+    <div class="sb-section">
+      <button class="btn" id="btnAddRack">+ Add Rack</button>
+    </div>
+
+    <div class="sb-section">
+      <h2>Racks in this room (<span id="rackCount">0</span>)</h2>
+      <div id="rackList"></div>
+    </div>
+
+    <div class="sb-section" id="editSection" style="display:none;">
+      <h2>Edit Selected Rack</h2>
+      <div class="field"><label>Name</label><input id="edName" type="text"></div>
+      <div class="field-row">
+        <div class="field"><label>Position X (cm)</label><input id="edX" type="number"></div>
+        <div class="field"><label>Position Z (cm, depth in room)</label><input id="edZ" type="number"></div>
+      </div>
+      <div class="field-row3">
+        <div class="field"><label>Width (cm)</label><input id="edW" type="number" min="10"></div>
+        <div class="field"><label>Depth (cm)</label><input id="edD" type="number" min="10"></div>
+        <div class="field"><label>Height (cm)</label><input id="edH" type="number" min="10"></div>
+      </div>
+      <div class="field"><label>Rotation</label>
+        <select id="edRot">
+          <option value="0">0° (facing +Z)</option>
+          <option value="90">90°</option>
+          <option value="180">180°</option>
+          <option value="270">270°</option>
+        </select>
+      </div>
+      <div class="field"><label>Color</label>
+        <div class="color-swatch-row" id="colorSwatches"></div>
+      </div>
+
+      <h2 style="margin-top:14px;">Levels</h2>
+      <div id="levelList"></div>
+      <div class="add-level-row">
+        <select id="newLevelType">
+          <option value="small">Small box (4 bins)</option>
+          <option value="skid">Skid (1 slot)</option>
+        </select>
+        <input id="newLevelH" type="number" min="1" placeholder="Height cm">
+        <button class="btn" id="btnAddLevel" style="width:auto; padding:8px 10px;">+</button>
+      </div>
+      <div style="font-size:0.7rem; color:var(--steel-soft); margin-top:4px;" id="levelHeightNote"></div>
+
+      <button class="btn danger" id="btnDeleteRack" style="margin-top:16px;">Delete This Rack</button>
+    </div>
   </div>
 </div>
 
+<!-- ===== Bin edit overlay (ported from the 2D tool) ===== -->
 <div class="overlay" id="overlay">
-  <div class="panel">
+  <div class="binpanel">
     <h3 id="panelTitle">Bin</h3>
     <div class="loc" id="panelLoc"></div>
     <div class="slot-ref" id="slotRef"></div>
 
     <div id="skidFields" style="display:none;">
-      <div class="field"><label for="skidId">Skid SKU / ID</label><input id="skidId" type="text" placeholder="e.g. PLT-7001"></div>
-      <div class="field"><label for="skidH">Skid height (cm)</label><input id="skidH" type="number" min="1" placeholder="e.g. 110"></div>
-      <div class="dims3" style="grid-template-columns: 1.3fr 1fr;">
-        <div class="field"><label for="skidRecvBy">Received by</label><input id="skidRecvBy" type="text" placeholder="Name"></div>
-        <div class="field"><label for="skidRecvDate">Date</label><input id="skidRecvDate" type="date"></div>
+      <div class="bfield"><label for="skidId">Skid SKU / ID</label><input id="skidId" type="text" placeholder="e.g. PLT-7001"></div>
+      <div class="bfield"><label for="skidH">Skid height (cm)</label><input id="skidH" type="number" min="1" placeholder="e.g. 110"></div>
+      <div class="field-row">
+        <div class="bfield"><label for="skidRecvBy">Received by</label><input id="skidRecvBy" type="text" placeholder="Name"></div>
+        <div class="bfield"><label for="skidRecvDate">Date</label><input id="skidRecvDate" type="date"></div>
       </div>
     </div>
 
     <div id="smallBoxFields">
-      <div class="stack-note">Items stack bottom-to-top by default (height). Use the depth field if a box sits behind another instead of on top.</div>
+      <div class="stack-note">Items stack bottom-to-top by default (height). Use "Behind" if a box sits behind another instead of on top.</div>
       <div class="item-list" id="itemList"></div>
       <div class="add-item-row">
         <div><label>Box ID</label><input id="newId" type="text" placeholder="SKU"></div>
         <div><label>W (cm)</label><input id="newW" type="number" min="1"></div>
         <div><label>H (cm)</label><input id="newH" type="number" min="1"></div>
         <div><label>D (cm)</label><input id="newD" type="number" min="1"></div>
-        <button class="btn-add" id="btnAddItem" type="button">+ Add</button>
+        <button class="btn-save" id="btnAddItem" type="button" style="width:auto; padding:8px 12px;">+ Add</button>
       </div>
       <div class="add-item-row" style="grid-template-columns: 1.2fr 1.3fr 1fr;">
         <div><label>Stack</label>
@@ -284,12 +214,6 @@
       <div class="history-section" id="historySection"></div>
     </div>
 
-    <div class="viz-box">
-      <div class="viz-label">Live preview (front view, scaled)</div>
-      <div id="vizContainer"></div>
-      <div class="stat-row" id="statRow"></div>
-    </div>
-
     <div class="panel-actions">
       <button class="btn-cancel" id="btnCancel">Close</button>
       <button class="btn-clear-item" id="btnClearItem">Clear all</button>
@@ -299,453 +223,461 @@
 </div>
 
 <script>
-let RACKS = ['A','B'];
+// ================= THREE.JS SCENE SETUP =================
+const canvasWrap = document.getElementById('canvasWrap');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xEDEBE4);
 
-// Each rack: { w, d, h, levels: [{type, height}, ...] } — fully independent
-let rackConfig = {};
-function defaultRackCfg() { return { w:120, d:100, h:215, levels: [] }; }
-RACKS.forEach(r => { rackConfig[r] = defaultRackCfg(); });
-let activeSetupRack = 'A';
+const camera = new THREE.PerspectiveCamera(45, 1, 1, 20000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+canvasWrap.appendChild(renderer.domElement);
 
-function nextRackName() {
-  // next unused single letter A-Z, then AA, AB, ... as fallback
-  for (let i = 0; i < 26; i++) {
-    const letter = String.fromCharCode(65 + i);
-    if (!RACKS.includes(letter)) return letter;
-  }
-  let n = RACKS.length;
-  let name;
-  do { name = 'R' + (n+1); n++; } while (RACKS.includes(name));
-  return name;
+function resizeRenderer() {
+  const w = canvasWrap.clientWidth, h = canvasWrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
 }
+window.addEventListener('resize', resizeRenderer);
 
-function cfg(rack) { return rackConfig[rack]; }
-function usedHeight(rack) { return cfg(rack).levels.reduce((s,l)=>s+l.height,0); }
-function remainingHeight(rack) { return cfg(rack).h - usedHeight(rack); }
+scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+dirLight.position.set(500, 800, 600);
+scene.add(dirLight);
+const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+dirLight2.position.set(-400, 300, -500);
+scene.add(dirLight2);
 
-function renderRackTabs() {
-  const wrap = document.getElementById('rackTabs');
-  wrap.innerHTML = '';
-  RACKS.forEach(r => {
-    const tabWrap = document.createElement('span');
-    tabWrap.style.display = 'inline-flex';
-    tabWrap.style.alignItems = 'center';
+const ROOM_SIZE = 2000;
+const floorGeo = new THREE.PlaneGeometry(ROOM_SIZE, ROOM_SIZE);
+const floorMat = new THREE.MeshStandardMaterial({ color: 0xE1DED4, side: THREE.DoubleSide });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
 
-    const tab = document.createElement('button');
-    tab.type = 'button';
-    tab.className = 'rack-tab' + (r === activeSetupRack ? ' active' : '');
-    const done = cfg(r).levels.length > 0;
-    tab.innerHTML = `Rack ${r}${done ? '<span class="check">&#10003;</span>' : ''}`;
-    tab.addEventListener('click', () => { activeSetupRack = r; loadRackIntoForm(); });
-    tabWrap.appendChild(tab);
+const grid = new THREE.GridHelper(ROOM_SIZE, ROOM_SIZE / 50, 0xB0AC9C, 0xCFCBBC);
+scene.add(grid);
+scene.add(new THREE.AxesHelper(80));
 
-    if (RACKS.length > 1) {
-      const rm = document.createElement('button');
-      rm.type = 'button';
-      rm.title = `Remove Rack ${r}`;
-      rm.textContent = '✕';
-      rm.style.cssText = 'background:transparent; border:none; color:var(--highlight); cursor:pointer; font-size:0.8rem; padding:0 6px 0 2px;';
-      rm.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (!confirm(`Remove Rack ${r}? This deletes its configuration.`)) return;
-        const idx = RACKS.indexOf(r);
-        RACKS.splice(idx, 1);
-        delete rackConfig[r];
-        if (activeSetupRack === r) activeSetupRack = RACKS[0];
-        loadRackIntoForm();
-      });
-      tabWrap.appendChild(rm);
+// ================= CUSTOM ORBIT CONTROLS =================
+let camTarget = new THREE.Vector3(0, 60, 0);
+let camRadius = 700;
+let camYaw = Math.PI / 4;
+let camPitch = 0.6;
+const MIN_PITCH = 0.08, MAX_PITCH = 1.5, MIN_RADIUS = 80, MAX_RADIUS = 3000;
+
+function updateCameraPosition() {
+  const x = camTarget.x + camRadius * Math.cos(camPitch) * Math.sin(camYaw);
+  const y = camTarget.y + camRadius * Math.sin(camPitch);
+  const z = camTarget.z + camRadius * Math.cos(camPitch) * Math.cos(camYaw);
+  camera.position.set(x, y, z);
+  camera.lookAt(camTarget);
+}
+updateCameraPosition();
+
+let isDragging = false, isPanning = false, lastX = 0, lastY = 0;
+const canvasEl = renderer.domElement;
+canvasEl.addEventListener('contextmenu', e => e.preventDefault());
+canvasEl.addEventListener('mousedown', (e) => {
+  if (e.button === 2) { isPanning = true; } else { isDragging = true; }
+  lastX = e.clientX; lastY = e.clientY;
+});
+window.addEventListener('mouseup', () => { isDragging = false; isPanning = false; });
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging && !isPanning) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  if (isDragging) {
+    camYaw -= dx * 0.006;
+    camPitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, camPitch + dy * 0.006));
+    updateCameraPosition();
+  } else if (isPanning) {
+    const panSpeed = camRadius * 0.0015;
+    const right = new THREE.Vector3(Math.sin(camYaw + Math.PI/2), 0, Math.cos(camYaw + Math.PI/2));
+    camTarget.addScaledVector(right, -dx * panSpeed);
+    camTarget.y = Math.max(0, camTarget.y + dy * panSpeed);
+    updateCameraPosition();
+  }
+});
+canvasEl.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  camRadius = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, camRadius * (1 + e.deltaY * 0.001)));
+  updateCameraPosition();
+}, { passive: false });
+
+let lastTouchDist = null;
+canvasEl.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) { isDragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; }
+  else if (e.touches.length === 2) {
+    isDragging = false;
+    const dx = e.touches[0].clientX - e.touches[1].clientX, dy = e.touches[0].clientY - e.touches[1].clientY;
+    lastTouchDist = Math.sqrt(dx*dx+dy*dy);
+  }
+}, { passive: true });
+canvasEl.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 1 && isDragging) {
+    const dx = e.touches[0].clientX - lastX, dy = e.touches[0].clientY - lastY;
+    lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+    camYaw -= dx * 0.006;
+    camPitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, camPitch + dy * 0.006));
+    updateCameraPosition();
+  } else if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX, dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if (lastTouchDist) {
+      const delta = lastTouchDist - dist;
+      camRadius = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, camRadius * (1 + delta * 0.003)));
+      updateCameraPosition();
     }
-    wrap.appendChild(tabWrap);
-  });
-
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'rack-tab';
-  addBtn.style.color = 'var(--amber-dark)';
-  addBtn.textContent = '+ Add rack';
-  addBtn.addEventListener('click', () => {
-    const name = nextRackName();
-    RACKS.push(name);
-    rackConfig[name] = defaultRackCfg();
-    activeSetupRack = name;
-    loadRackIntoForm();
-  });
-  wrap.appendChild(addBtn);
-}
-
-function loadRackIntoForm() {
-  renderRackTabs();
-  const c = cfg(activeSetupRack);
-  document.getElementById('rackW').value = c.w;
-  document.getElementById('rackD').value = c.d;
-  document.getElementById('rackH').value = c.h;
-  renderLevelPlanList();
-  updateHeightMeter();
-  renderCopyFromSelect();
-}
-
-function renderCopyFromSelect() {
-  const sel = document.getElementById('copyFromSelect');
-  sel.innerHTML = '';
-  RACKS.filter(r => r !== activeSetupRack && cfg(r).levels.length > 0).forEach(r => {
-    const opt = document.createElement('option');
-    opt.value = r; opt.textContent = `Rack ${r} (${cfg(r).levels.length} levels)`;
-    sel.appendChild(opt);
-  });
-  const hasOptions = sel.options.length > 0;
-  sel.disabled = !hasOptions;
-  document.getElementById('btnCopyFrom').disabled = !hasOptions;
-}
-
-document.getElementById('btnCopyFrom').addEventListener('click', () => {
-  const src = document.getElementById('copyFromSelect').value;
-  if (!src) return;
-  const c = cfg(src);
-  rackConfig[activeSetupRack] = { w:c.w, d:c.d, h:c.h, levels: c.levels.map(l=>({...l})) };
-  loadRackIntoForm();
-});
-
-function renderLevelPlanList() {
-  const wrap = document.getElementById('levelPlanList');
-  wrap.innerHTML = '';
-  const c = cfg(activeSetupRack);
-  c.levels.forEach((lv, idx) => {
-    const row = document.createElement('div');
-    row.className = 'level-plan-row';
-    const wDisp = lv.type === 'small' ? (c.w/4).toFixed(0) : c.w;
-    row.innerHTML = `
-      <span class="idx">L${idx+1}</span>
-      <span class="typebadge ${lv.type}">${lv.type === 'skid' ? 'SKID' : 'SMALL BOX'}</span>
-      <span class="htxt">${lv.height} cm &middot; ${lv.type==='small' ? '4 bins, each '+wDisp+'&times;'+lv.height+'&times;'+c.d+'cm' : '1 slot, '+wDisp+'&times;'+lv.height+'&times;'+c.d+'cm'}</span>
-    `;
-    const rm = document.createElement('button');
-    rm.className = 'rm'; rm.textContent = '✕';
-    rm.addEventListener('click', () => { c.levels.splice(idx,1); renderLevelPlanList(); updateHeightMeter(); renderRackTabs(); });
-    row.appendChild(rm);
-    wrap.appendChild(row);
-  });
-}
-
-function updateHeightMeter() {
-  const c = cfg(activeSetupRack);
-  c.w = parseFloat(document.getElementById('rackW').value) || 0;
-  c.d = parseFloat(document.getElementById('rackD').value) || 0;
-  c.h = parseFloat(document.getElementById('rackH').value) || 0;
-  const used = usedHeight(activeSetupRack);
-  const pct = c.h ? Math.min(100,(used/c.h)*100) : 0;
-  const over = used > c.h;
-  document.getElementById('heightMeterFill').style.width = pct+'%';
-  document.getElementById('heightMeterFill').className = 'height-meter-fill'+(over?' over':'');
-  const remaining = c.h - used;
-  document.getElementById('heightReadout').innerHTML = over
-    ? `<span class="over-txt">Rack ${activeSetupRack}'s levels use ${used}cm, which is ${used-c.h}cm MORE than its ${c.h}cm height. Remove or shrink a level.</span>`
-    : `Rack ${activeSetupRack}: levels use <b>${used}</b> of <b>${c.h}</b>cm &mdash; <b>${remaining}cm</b> remaining.`;
-  document.getElementById('btnAddLevel').disabled = remaining <= 0;
-  updateBuildButton();
-}
-
-function updateBuildButton() {
-  const anyConfigured = RACKS.some(r => cfg(r).levels.length > 0);
-  const anyOverflow = RACKS.some(r => usedHeight(r) > cfg(r).h);
-  document.getElementById('btnBuild').disabled = !anyConfigured || anyOverflow;
-  const configuredCount = RACKS.filter(r => cfg(r).levels.length>0).length;
-  document.getElementById('buildNote').textContent = anyOverflow
-    ? 'Fix the overflowing rack(s) before building.'
-    : `${configuredCount} of 4 racks configured. Unconfigured racks will be built empty (no levels) unless you set them up first.`;
-}
-
-document.getElementById('btnAddLevel').addEventListener('click', () => {
-  const type = document.getElementById('newLevelType').value;
-  const h = parseFloat(document.getElementById('newLevelH').value) || 0;
-  if (h <= 0) return;
-  if (h > remainingHeight(activeSetupRack)) { alert(`Only ${remainingHeight(activeSetupRack)}cm of height left on Rack ${activeSetupRack} — this level won't fit.`); return; }
-  cfg(activeSetupRack).levels.push({ type, height: h });
-  document.getElementById('newLevelH').value = '';
-  renderLevelPlanList();
-  updateHeightMeter();
-  renderRackTabs();
-  renderCopyFromSelect();
-});
-
-['rackW','rackD','rackH'].forEach(id => document.getElementById(id).addEventListener('input', updateHeightMeter));
-
-let hasBuiltOnce = false;
-document.getElementById('btnBuild').addEventListener('click', () => {
-  document.getElementById('setupScreen').classList.add('hidden');
-  document.getElementById('mainScreen').classList.remove('hidden');
-  document.getElementById('searchBlock').classList.remove('hidden');
-  document.getElementById('headerSubtitle').textContent = 'Stack multiple boxes per bin \u00b7 enter real dimensions to see dead space';
-  if (!hasBuiltOnce) {
-    initState();
-    hasBuiltOnce = true;
+    lastTouchDist = dist;
   }
-  // on later builds (after going back to edit setup), keep whatever the user already entered
-  renderGrid();
-  document.getElementById('footerText').textContent =
-    'Prototype — data resets on page reload. Each rack uses its own configured dimensions and level plan. Your entered items are kept if you go back and adjust the setup.';
-});
+}, { passive: true });
+canvasEl.addEventListener('touchend', () => { isDragging = false; lastTouchDist = null; });
 
-document.getElementById('editSetupBtn').addEventListener('click', () => {
-  document.getElementById('mainScreen').classList.add('hidden');
-  document.getElementById('searchBlock').classList.add('hidden');
-  document.getElementById('setupScreen').classList.remove('hidden');
-  document.getElementById('headerSubtitle').textContent = 'Step 1 \u2014 configure each rack separately';
-  loadRackIntoForm();
-});
-
-loadRackIntoForm();
-
-// ================= MAIN APP (after Build) =================
-let state = {};
-let activeBinId = null;
-let activeIsSkid = false;
-let draftItems = [];
-let draftHistory = [];
-let activeRackKey = null;
-let activeLevel = null;
-
-function isSkidLevel(rack, levelIdx1based) { return cfg(rack).levels[levelIdx1based-1].type === 'skid'; }
-function binsForLevel(rack, levelIdx1based) { return isSkidLevel(rack, levelIdx1based) ? 1 : 4; }
-function levelHeight(rack, levelIdx1based) { return cfg(rack).levels[levelIdx1based-1].height; }
-function smallSlotFor(rack, levelIdx1based) { const c=cfg(rack); return { w: c.w/4, h: levelHeight(rack,levelIdx1based), d: c.d }; }
-function skidSlotHFor(rack, levelIdx1based) { return levelHeight(rack, levelIdx1based); }
-
-function binKey(rack, level, bin) { return `${rack}-${level}-${String(bin).padStart(2,'0')}`; }
-function levelOfKey(key) { return parseInt(key.split('-')[1], 10); }
-function rackOfKey(key) { return key.split('-')[0]; }
-
-// Distinct color per item (not just 2 alternating colors) — cycles through palette if more items than colors
+// ================= RACK DATA MODEL =================
+const RACK_COLORS = ['#4C7A5E','#3D6B93','#B5731E','#8B4F9E','#A13D3D','#3D8B8B','#6B8B3D','#9E5C8B'];
 const ITEM_COLORS = ['#4C7A5E','#3D6B93','#B5731E','#8B4F9E','#A13D3D','#3D8B8B','#6B8B3D','#9E5C8B','#3D5C9E','#9E8B3D','#5C3D9E','#3D9E6B','#C4177C','#556B2F','#4682B4'];
 function itemColor(idx) { return ITEM_COLORS[idx % ITEM_COLORS.length]; }
 
-function initState() {
-  state = {};
-  RACKS.forEach(rack => {
-    const levels = cfg(rack).levels;
-    levels.forEach((lv, i) => {
-      const l = i + 1;
-      if (lv.type === 'skid') {
-        const h = skidSlotHFor(rack, l);
-        state[binKey(rack, l, 1)] = { id: `PLT-${rack}${l}`, h: Math.round(h*0.7) };
-      } else {
-        const slot = smallSlotFor(rack, l);
-        state[binKey(rack, l, 1)] = { items: [ { id:`SK-${rack}${l}`, w: Math.round(slot.w*0.8), h: Math.round(slot.h*0.6), d: Math.round(slot.d*0.75) } ] };
-      }
-    });
-  });
+let racks = [];
+let selectedId = null;
+let nextRackNum = 1;
+
+// binState[rackId] = { "L1-B1": {items:[...], history:[...]} or {id,h,receivedBy,receivedDate} for skid }
+let binState = {};
+function binStateKey(level, binIdx) { return `L${level}-B${binIdx}`; }
+
+function defaultLevels() {
+  return [
+    { type: 'small', height: 45 },
+    { type: 'small', height: 45 },
+    { type: 'small', height: 45 },
+    { type: 'skid', height: 80 },
+  ];
 }
 
+function addRack() {
+  const id = 'rack-' + Date.now();
+  const spacing = 180, cols = 4, idx = racks.length;
+  const rack = {
+    id, name: 'Rack ' + nextRackNum++,
+    x: (idx % cols) * spacing - (spacing * (cols-1))/2,
+    z: Math.floor(idx / cols) * 150,
+    rotationDeg: 0, w: 120, d: 100, h: 215,
+    color: RACK_COLORS[idx % RACK_COLORS.length],
+    levels: defaultLevels(),
+  };
+  racks.push(rack);
+  binState[id] = {};
+  selectedId = id;
+  rebuildScene();
+  renderSidebar();
+}
+
+function deleteSelectedRack() {
+  if (!selectedId) return;
+  if (!confirm('Delete this rack?')) return;
+  delete binState[selectedId];
+  racks = racks.filter(r => r.id !== selectedId);
+  selectedId = null;
+  rebuildScene();
+  renderSidebar();
+}
+
+// ================= STATS (ported from 2D tool) =================
 function smallBoxBinStats(items, slot) {
   const slotVol = slot.w*slot.h*slot.d;
   const usedVol = items.reduce((s,it)=>s+it.w*it.h*it.d,0);
   const usedPct = Math.min(100, Math.round((usedVol/slotVol)*100));
-
   const heightItems = items.filter(it => (it.stackAxis||'height') === 'height');
   const depthItems = items.filter(it => it.stackAxis === 'depth');
-
-  // height-stacked items sum their heights (a column); depth-stacked items sit beside that column
-  // and only their own height competes for vertical space (they don't add to the column's height).
   const sumHeightCol = heightItems.reduce((s,it)=>s+it.h,0);
   const maxDepthItemH = depthItems.reduce((m,it)=>Math.max(m,it.h),0);
   const sumH = Math.max(sumHeightCol, maxDepthItemH);
-
-  // depth-stacked items sum their depths (going back); height-stacked items sit at the front
-  // and only their own depth competes (they don't add to the depth chain).
-  const sumDepthChain = depthItems.reduce((s,it)=>s+it.d,0);
-  const maxHeightItemD = heightItems.reduce((m,it)=>Math.max(m,it.d),0);
-  const sumD = Math.max(sumDepthChain, maxHeightItemD);
-
+  const frontD = heightItems.reduce((m,it)=>Math.max(m,it.d),0);
+  const behindD = depthItems.reduce((s,it)=>s+it.d,0);
+  const sumD = frontD + behindD;
+  const remainingD = Math.max(0, slot.d - sumD);
   const maxW = items.reduce((m,it)=>Math.max(m,it.w),0);
   return { usedPct, deadH: Math.max(0,slot.h-sumH), deadD: Math.max(0,slot.d-sumD), deadW: Math.max(0,slot.w-maxW),
-    overH: sumH>slot.h, overD: sumD>slot.d, overW: maxW>slot.w, sumH, sumD, maxW };
+    overH: sumH>slot.h, overD: sumD>slot.d, overW: maxW>slot.w, sumH, sumD, maxW, remainingD, frontD, behindD };
 }
 function skidStats(item, slotH) {
   const usedPct = Math.min(100, Math.round((item.h/slotH)*100));
   return { usedPct, deadH: Math.max(0, slotH-item.h), oversized: item.h>slotH };
 }
 
-function rackFillPct(rack) {
-  let usedVol=0, slotVol=0;
-  const levels = cfg(rack).levels;
-  for (let l=1; l<=levels.length; l++) {
-    const nBins = binsForLevel(rack,l);
-    for (let b=1; b<=nBins; b++) {
-      const key = binKey(rack,l,b);
-      const item = state[key];
-      if (isSkidLevel(rack,l)) {
-        const h = skidSlotHFor(rack,l);
-        slotVol += h;
-        if (item) usedVol += Math.min(item.h,h);
-      } else {
-        const slot = smallSlotFor(rack,l);
-        const sv = slot.w*slot.h*slot.d;
-        slotVol += sv;
-        if (item && item.items) usedVol += Math.min(item.items.reduce((s,it)=>s+it.w*it.h*it.d,0), sv);
-      }
-    }
-  }
-  return slotVol ? Math.round((usedVol/slotVol)*100) : 0;
+function getSlotForBin(rack, levelIdx1) {
+  const lvl = rack.levels[levelIdx1-1];
+  if (lvl.type === 'skid') return { w: rack.w, h: lvl.height, d: rack.d, isSkid:true };
+  return { w: rack.w/4, h: lvl.height, d: rack.d, isSkid:false };
 }
 
-function overallDeadSpaceSummary() {
-  let totalDeadPct=0, count=0, occCount=0, totalCount=0;
-  RACKS.forEach(rack => {
-    const levels = cfg(rack).levels;
-    for (let l=1; l<=levels.length; l++) {
-      const nBins = binsForLevel(rack,l);
-      for (let b=1; b<=nBins; b++) {
-        const key = binKey(rack,l,b);
-        const item = state[key];
-        totalCount++;
-        if (item) {
-          if (isSkidLevel(rack,l)) { occCount++; count++; totalDeadPct += (100-skidStats(item, skidSlotHFor(rack,l)).usedPct); }
-          else if (item.items && item.items.length) { occCount++; count++; totalDeadPct += (100-smallBoxBinStats(item.items, smallSlotFor(rack,l)).usedPct); }
-        }
+// ================= 3D RACK MESH BUILDING =================
+let rackGroups = {};
+let clickableBinMeshes = []; // {mesh, rackId, level, binIdx, isSkid}
+
+function buildRackMesh(rack) {
+  const group = new THREE.Group();
+  group.userData.rackId = rack.id;
+  const totalLevelHeight = rack.levels.reduce((s,l)=>s+l.height, 0);
+  const color = new THREE.Color(rack.color);
+  const envH = Math.max(totalLevelHeight, 10);
+
+  const frameGeo = new THREE.BoxGeometry(rack.w, envH, rack.d);
+  const edges = new THREE.EdgesGeometry(frameGeo);
+  const frameLines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x2E3238 }));
+  frameLines.position.y = envH/2;
+  group.add(frameLines);
+
+  let yCursor = 0;
+  rack.levels.forEach((lvl, li) => {
+    const level = li + 1;
+    const divGeo = new THREE.PlaneGeometry(rack.w, rack.d);
+    const divLine = new THREE.LineSegments(new THREE.EdgesGeometry(divGeo), new THREE.LineBasicMaterial({ color: 0x565C64 }));
+    divLine.rotation.x = -Math.PI/2;
+    divLine.position.y = yCursor;
+    group.add(divLine);
+
+    const nBins = lvl.type === 'skid' ? 1 : 4;
+    for (let b = 1; b <= nBins; b++) {
+      const binW = lvl.type === 'skid' ? rack.w : rack.w/4;
+      const binX = lvl.type === 'skid' ? 0 : (-rack.w/2 + binW*(b-0.5));
+      const key = binStateKey(level, b);
+      const binData = (binState[rack.id] || {})[key];
+      const hasContent = lvl.type === 'skid' ? !!binData : (binData && binData.items && binData.items.length > 0);
+
+      // Clickable hit-test box (mostly invisible), sized to the bin's footprint
+      const hitGeo = new THREE.BoxGeometry(binW*0.96, lvl.height*0.9, rack.d*0.96);
+      const hitMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.001, depthWrite:false });
+      const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+      hitMesh.position.set(binX, yCursor + lvl.height/2, 0);
+      hitMesh.userData = { rackId: rack.id, level, binIdx: b, isSkid: lvl.type==='skid' };
+      group.add(hitMesh);
+      clickableBinMeshes.push(hitMesh);
+
+      // Occupancy tint overlay (thin, sits at the bin's floor)
+      const tintMat = new THREE.MeshStandardMaterial({
+        color: hasContent ? new THREE.Color(0x4C7A5E) : 0xffffff,
+        transparent: true, opacity: hasContent ? 0.28 : 0.05, side: THREE.DoubleSide
+      });
+      const tintGeo = new THREE.PlaneGeometry(binW*0.94, rack.d*0.94);
+      const tint = new THREE.Mesh(tintGeo, tintMat);
+      tint.rotation.x = -Math.PI/2;
+      tint.position.set(binX, yCursor + 0.6, 0);
+      group.add(tint);
+
+      // Real item boxes (if occupied)
+      if (lvl.type === 'skid' && binData) {
+        const st = skidStats(binData, lvl.height);
+        const boxH = Math.min(binData.h, lvl.height);
+        const boxGeo = new THREE.BoxGeometry(binW*0.85, boxH, rack.d*0.85);
+        const boxMat = new THREE.MeshStandardMaterial({ color: itemColor(0) });
+        const box = new THREE.Mesh(boxGeo, boxMat);
+        box.position.set(binX, yCursor + boxH/2, 0);
+        group.add(box);
+      } else if (lvl.type !== 'skid' && hasContent) {
+        const slot = getSlotForBin(rack, level);
+        const heightItems = binData.items.filter(it => (it.stackAxis||'height')==='height');
+        const depthItems = binData.items.filter(it => it.stackAxis==='depth');
+        // front (height) stack: centered in depth at the front half, stacked bottom-up
+        let hy = 0;
+        heightItems.forEach((it, idx) => {
+          const bh = Math.min(it.h, lvl.height - hy);
+          if (bh <= 0) return;
+          const bw = Math.min(it.w, binW);
+          const bd = Math.min(it.d, rack.d);
+          const geo = new THREE.BoxGeometry(bw*0.9, bh*0.94, bd*0.9);
+          const mat = new THREE.MeshStandardMaterial({ color: itemColor(binData.items.indexOf(it)) });
+          const box = new THREE.Mesh(geo, mat);
+          box.position.set(binX, yCursor + hy + bh/2, -rack.d/2 + bd/2);
+          group.add(box);
+          hy += it.h;
+        });
+        // behind (depth) stack: placed further back in Z, one after another
+        let dz = -rack.d/2 + heightItems.reduce((m,it)=>Math.max(m,it.d),0);
+        depthItems.forEach((it) => {
+          const bd = Math.min(it.d, rack.d);
+          const bh = Math.min(it.h, lvl.height);
+          const bw = Math.min(it.w, binW);
+          const geo = new THREE.BoxGeometry(bw*0.9, bh*0.94, bd*0.9);
+          const mat = new THREE.MeshStandardMaterial({ color: itemColor(binData.items.indexOf(it)) });
+          const box = new THREE.Mesh(geo, mat);
+          box.position.set(binX, yCursor + bh/2, dz + bd/2);
+          group.add(box);
+          dz += it.d;
+        });
       }
     }
+
+    if (lvl.type === 'small') {
+      for (let i = 1; i < 4; i++) {
+        const xPos = -rack.w/2 + (rack.w/4)*i;
+        const vGeo = new THREE.PlaneGeometry(rack.d, lvl.height);
+        const vLine = new THREE.LineSegments(new THREE.EdgesGeometry(vGeo), new THREE.LineBasicMaterial({ color: 0x9A9689 }));
+        vLine.rotation.y = Math.PI/2;
+        vLine.position.set(xPos, yCursor + lvl.height/2, 0);
+        group.add(vLine);
+      }
+    }
+    yCursor += lvl.height;
   });
-  return { avgDead: count?Math.round(totalDeadPct/count):0, occCount, totalCount };
+
+  group.position.set(rack.x, 0, rack.z);
+  group.rotation.y = THREE.MathUtils.degToRad(rack.rotationDeg);
+  return group;
 }
 
-function renderSummary() {
-  const s = overallDeadSpaceSummary();
-  document.getElementById('summaryBar').innerHTML = `
-    <span>Occupied slots: <b>${s.occCount} / ${s.totalCount}</b></span>
-    <span>Average dead space in occupied slots: <span class="dead-stat">${s.avgDead}%</span></span>
-  `;
-}
-
-function renderGrid() {
-  const grid = document.getElementById('rackGrid');
-  grid.innerHTML = '';
-  RACKS.forEach(rack => {
-    const c = cfg(rack);
-    const rackEl = document.createElement('div');
-    rackEl.className = 'rack';
-    const label = document.createElement('div');
-    label.className = 'rack-label';
-    label.innerHTML = `<span>Rack ${rack}</span><span class="fill-pct">${rackFillPct(rack)}% used</span>`;
-    rackEl.appendChild(label);
-    const dims = document.createElement('div');
-    dims.className = 'rack-dims code';
-    dims.textContent = `${c.w}×${c.d}×${c.h}cm · ${c.levels.length} level(s)`;
-    rackEl.appendChild(dims);
-
-    if (c.levels.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'level';
-      empty.innerHTML = '<div style="font-size:0.78rem; color:var(--steel-soft); padding:10px 0;">Not configured yet.</div>';
-      rackEl.appendChild(empty);
-    }
-
-    for (let l = c.levels.length; l >= 1; l--) {
-      const skid = isSkidLevel(rack,l);
-      const nBins = binsForLevel(rack,l);
-      const lvlH = levelHeight(rack,l);
-      const levelEl = document.createElement('div');
-      levelEl.className = 'level';
-      const levelLabel = document.createElement('div');
-      levelLabel.className = 'level-label code';
-      levelLabel.innerHTML = `<span>Level ${l} (${lvlH}cm)</span><span class="tag">${skid?'SKID':'SMALL BOX'}</span>`;
-      levelEl.appendChild(levelLabel);
-
-      const binsEl = document.createElement('div');
-      binsEl.className = 'bins' + (skid ? ' skid-row' : '');
-      const rowPx = Math.max(46, Math.min(110, lvlH * 0.9));
-
-      for (let b = 1; b <= nBins; b++) {
-        const key = binKey(rack,l,b);
-        const item = state[key];
-        const binEl = document.createElement('div');
-        const hasContent = skid ? !!item : (item && item.items && item.items.length > 0);
-        binEl.className = 'bin' + (hasContent ? ' occupied' : '') + (skid ? ' skid' : '');
-        binEl.style.height = rowPx + 'px';
-        binEl.dataset.bin = key;
-
-        if (skid && item) {
-          const slotH = skidSlotHFor(rack,l);
-          const st = skidStats(item, slotH);
-          const fill = document.createElement('div');
-          fill.className='skid-fill'; fill.style.width=st.usedPct+'%';
-          binEl.appendChild(fill);
-          if (st.deadH>0) { const dead=document.createElement('div'); dead.className='skid-dead'; dead.style.width=(100-st.usedPct)+'%'; dead.style.flexShrink='0'; binEl.appendChild(dead); }
-        } else if (!skid && hasContent) {
-          const slot = smallSlotFor(rack,l);
-          item.items.forEach((it,idx) => { const band=document.createElement('div'); band.className='stackband'; band.style.height=Math.min(100,(it.h/slot.h)*100)+'%'; band.style.background=itemColor(idx); binEl.appendChild(band); });
-        }
-
-        const tip = document.createElement('div');
-        tip.className = 'tip code';
-        if (skid) {
-          const slotH = skidSlotHFor(rack,l);
-          if (item) {
-            const st = skidStats(item,slotH);
-            const recv = item.receivedBy ? `Recv: ${item.receivedBy}${item.receivedDate?' ('+item.receivedDate+')':''}` : 'Recv: —';
-            tip.textContent = `${key} — ${item.id}\n${recv}\nH ${item.h}/${slotH}cm | dead ${st.deadH}cm${st.oversized?' OVERSIZED':''}\nClick for more info`;
-          } else {
-            tip.textContent = `${key} — empty (${slotH}cm clear height)\nClick for more info`;
-          }
-        } else if (hasContent) {
-          const slot = smallSlotFor(rack,l);
-          const st = smallBoxBinStats(item.items, slot);
-          const lines = item.items.map(it => {
-            const recv = it.receivedBy ? `${it.receivedBy}${it.receivedDate?' '+it.receivedDate:''}` : 'no recv info';
-            return `${it.id} — ${it.w}×${it.h}×${it.d}cm — ${recv}`;
-          }).join('\n');
-          tip.textContent = `${key} — ${item.items.length} item(s)\n${lines}\n${st.usedPct}% vol used | dead H${st.deadH} D${st.deadD} W${st.deadW}cm${(st.overH||st.overD||st.overW)?'\n⚠ OVERFLOW':''}\nClick for more info`;
-        } else {
-          const slot = smallSlotFor(rack,l);
-          tip.textContent = `${key} — empty (${slot.w.toFixed(0)}×${slot.h}×${slot.d}cm slot)\nClick for more info`;
-        }
-        binEl.appendChild(tip);
-        binEl.addEventListener('click', () => openPanel(key, skid, rack, l));
-        binsEl.appendChild(binEl);
-      }
-      levelEl.appendChild(binsEl);
-      rackEl.appendChild(levelEl);
-    }
-    grid.appendChild(rackEl);
+function rebuildScene() {
+  Object.values(rackGroups).forEach(g => scene.remove(g));
+  rackGroups = {};
+  clickableBinMeshes = [];
+  racks.forEach(rack => {
+    const g = buildRackMesh(rack);
+    scene.add(g);
+    rackGroups[rack.id] = g;
   });
-  renderSummary();
+  applySelectionHighlight();
 }
 
-function openPanel(key, skid, rack, level) {
-  activeBinId = key; activeIsSkid = skid; activeRackKey = rack; activeLevel = level;
-  const item = state[key];
-  document.getElementById('panelTitle').textContent = skid ? 'Skid slot' : 'Bin — multiple items allowed';
-  document.getElementById('panelLoc').textContent = `Location: ${key}`;
-
-  if (skid) {
-    const slotH = skidSlotHFor(rack, level);
-    document.getElementById('slotRef').innerHTML = `Slot clear height: <b>${slotH} cm</b> (one skid per level)`;
-  } else {
-    const slot = smallSlotFor(rack, level);
-    document.getElementById('slotRef').innerHTML = `Slot size: <b>${slot.w.toFixed(0)} × ${slot.h} × ${slot.d} cm</b> (W × H × D)`;
+function applySelectionHighlight() {
+  scene.children = scene.children.filter(c => c.userData.isSelRing !== true);
+  if (selectedId) {
+    const rack = racks.find(r => r.id === selectedId);
+    if (rack) {
+      const ringGeo = new THREE.RingGeometry(Math.max(rack.w, rack.d)/2 + 10, Math.max(rack.w, rack.d)/2 + 18, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xC4177C, side: THREE.DoubleSide });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI/2;
+      ring.position.set(rack.x, 0.5, rack.z);
+      ring.userData.isSelRing = true;
+      scene.add(ring);
+    }
   }
-
-  document.getElementById('skidFields').style.display = skid ? 'block' : 'none';
-  document.getElementById('smallBoxFields').style.display = skid ? 'none' : 'block';
-
-  if (skid) {
-    document.getElementById('skidId').value = item ? item.id : '';
-    document.getElementById('skidH').value = item ? item.h : '';
-    document.getElementById('skidRecvBy').value = item ? (item.receivedBy || '') : '';
-    document.getElementById('skidRecvDate').value = item ? (item.receivedDate || '') : '';
-  } else {
-    draftItems = (item && item.items) ? item.items.map(x=>({...x})) : [];
-    draftHistory = (item && item.history) ? item.history.map(x=>({...x})) : [];
-    document.getElementById('newId').value=''; document.getElementById('newW').value='';
-    document.getElementById('newH').value=''; document.getElementById('newD').value='';
-    document.getElementById('newRecvBy').value='';
-    document.getElementById('newRecvDate').value='';
-    document.getElementById('addItemError').textContent = '';
-    renderItemList();
-  }
-  renderViz();
-  document.getElementById('overlay').classList.add('show');
 }
-function closePanel() { document.getElementById('overlay').classList.remove('show'); activeBinId=null; }
+
+// ================= RAYCAST SELECTION (rack select OR bin click) =================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let mouseDownPos = null;
+
+canvasEl.addEventListener('mousedown', (e) => { mouseDownPos = {x:e.clientX, y:e.clientY}; });
+canvasEl.addEventListener('mouseup', (e) => {
+  if (!mouseDownPos) return;
+  const moved = Math.hypot(e.clientX - mouseDownPos.x, e.clientY - mouseDownPos.y);
+  mouseDownPos = null;
+  if (moved > 5 || e.button !== 0) return;
+
+  const rect = canvasEl.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+
+  const hits = raycaster.intersectObjects(clickableBinMeshes, false);
+  if (hits.length > 0) {
+    const ud = hits[0].object.userData;
+    selectedId = ud.rackId;
+    applySelectionHighlight();
+    renderSidebar();
+    openBinPanel(ud.rackId, ud.level, ud.binIdx, ud.isSkid);
+  }
+});
+
+// ================= SIDEBAR UI =================
+function renderSidebar() {
+  document.getElementById('rackCount').textContent = racks.length;
+  const listEl = document.getElementById('rackList');
+  listEl.innerHTML = '';
+  if (racks.length === 0) listEl.innerHTML = '<div class="empty-note">Room is empty. Click "+ Add Rack" to place your first one.</div>';
+  racks.forEach(r => {
+    const item = document.createElement('div');
+    item.className = 'rack-list-item' + (r.id === selectedId ? ' selected' : '');
+    item.innerHTML = `<div><div class="rname">${r.name}</div><div class="rdims code">${r.w}\u00d7${r.d}\u00d7${r.h}cm</div></div>`;
+    item.addEventListener('click', () => { selectedId = r.id; applySelectionHighlight(); renderSidebar(); });
+    listEl.appendChild(item);
+  });
+
+  const editSection = document.getElementById('editSection');
+  const rack = racks.find(r => r.id === selectedId);
+  if (!rack) { editSection.style.display = 'none'; return; }
+  editSection.style.display = 'block';
+  document.getElementById('edName').value = rack.name;
+  document.getElementById('edX').value = rack.x;
+  document.getElementById('edZ').value = rack.z;
+  document.getElementById('edW').value = rack.w;
+  document.getElementById('edD').value = rack.d;
+  document.getElementById('edH').value = rack.h;
+  document.getElementById('edRot').value = rack.rotationDeg;
+
+  const swWrap = document.getElementById('colorSwatches');
+  swWrap.innerHTML = '';
+  RACK_COLORS.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch' + (c === rack.color ? ' selected' : '');
+    sw.style.background = c;
+    sw.addEventListener('click', () => { rack.color = c; rebuildScene(); renderSidebar(); });
+    swWrap.appendChild(sw);
+  });
+  renderLevelList(rack);
+}
+
+function renderLevelList(rack) {
+  const wrap = document.getElementById('levelList');
+  wrap.innerHTML = '';
+  const used = rack.levels.reduce((s,l)=>s+l.height,0);
+  document.getElementById('levelHeightNote').textContent = `Levels use ${used}cm of ${rack.h}cm rack height (${Math.max(0, rack.h-used)}cm remaining).`;
+  rack.levels.forEach((lv, idx) => {
+    const row = document.createElement('div');
+    row.className = 'level-row';
+    row.innerHTML = `<span class="lbadge ${lv.type}">${lv.type==='skid'?'SKID':'SMALL'}</span><span class="ltxt code">L${idx+1} \u2014 ${lv.height}cm</span>`;
+    const rm = document.createElement('button'); rm.className='rm'; rm.textContent='✕';
+    rm.addEventListener('click', () => { rack.levels.splice(idx,1); rebuildScene(); renderSidebar(); });
+    row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+}
+
+document.getElementById('btnAddRack').addEventListener('click', addRack);
+document.getElementById('btnDeleteRack').addEventListener('click', deleteSelectedRack);
+['edName','edX','edZ','edW','edD','edH','edRot'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    const rack = racks.find(r => r.id === selectedId);
+    if (!rack) return;
+    rack.name = document.getElementById('edName').value || rack.name;
+    rack.x = parseFloat(document.getElementById('edX').value) || 0;
+    rack.z = parseFloat(document.getElementById('edZ').value) || 0;
+    rack.w = parseFloat(document.getElementById('edW').value) || rack.w;
+    rack.d = parseFloat(document.getElementById('edD').value) || rack.d;
+    rack.h = parseFloat(document.getElementById('edH').value) || rack.h;
+    rack.rotationDeg = parseFloat(document.getElementById('edRot').value) || 0;
+    rebuildScene();
+    document.getElementById('rackCount').textContent = racks.length;
+    const listItems = document.getElementById('rackList').children;
+    racks.forEach((r,i) => {
+      if (listItems[i]) {
+        listItems[i].querySelector('.rname').textContent = r.name;
+        listItems[i].querySelector('.rdims').textContent = `${r.w}\u00d7${r.d}\u00d7${r.h}cm`;
+      }
+    });
+    renderLevelList(rack);
+  });
+});
+document.getElementById('btnAddLevel').addEventListener('click', () => {
+  const rack = racks.find(r => r.id === selectedId);
+  if (!rack) return;
+  const type = document.getElementById('newLevelType').value;
+  const h = parseFloat(document.getElementById('newLevelH').value) || 0;
+  if (h <= 0) return;
+  rack.levels.push({ type, height: h });
+  document.getElementById('newLevelH').value = '';
+  rebuildScene();
+  renderLevelList(rack);
+});
+
+// ================= BIN PANEL (ported + adapted from 2D tool) =================
+let activeRackId = null, activeLevel = null, activeBinIdx = null, activeIsSkid = false;
+let draftItems = [], draftHistory = [];
 
 function moveItemInAxis(idx, dir) {
   const axis = draftItems[idx].stackAxis || 'height';
@@ -755,7 +687,7 @@ function moveItemInAxis(idx, dir) {
   if (swapPos < 0 || swapPos >= sameAxisIdx.length) return;
   const otherIdx = sameAxisIdx[swapPos];
   const tmp = draftItems[idx]; draftItems[idx] = draftItems[otherIdx]; draftItems[otherIdx] = tmp;
-  renderItemList(); renderViz();
+  renderItemList();
 }
 
 function renderItemList() {
@@ -765,39 +697,29 @@ function renderItemList() {
     const axis = it.stackAxis || 'height';
     const sameAxisIdx = draftItems.map((x,i)=>({x,i})).filter(o => (o.x.stackAxis||'height')===axis).map(o=>o.i);
     const posInAxis = sameAxisIdx.indexOf(idx);
-
     const row = document.createElement('div'); row.className='item-row';
-
     const reorder = document.createElement('div'); reorder.className='reorder';
-    const up = document.createElement('button'); up.type='button'; up.textContent='▲';
-    up.disabled = posInAxis === 0;
-    up.title = 'Move up (closer to top of stack)';
+    const up = document.createElement('button'); up.type='button'; up.textContent='▲'; up.disabled = posInAxis===0;
     up.addEventListener('click', () => moveItemInAxis(idx, -1));
-    const down = document.createElement('button'); down.type='button'; down.textContent='▼';
-    down.disabled = posInAxis === sameAxisIdx.length-1;
-    down.title = 'Move down';
+    const down = document.createElement('button'); down.type='button'; down.textContent='▼'; down.disabled = posInAxis===sameAxisIdx.length-1;
     down.addEventListener('click', () => moveItemInAxis(idx, 1));
-    reorder.appendChild(up); reorder.appendChild(down);
-    row.appendChild(reorder);
-
+    reorder.appendChild(up); reorder.appendChild(down); row.appendChild(reorder);
     const sw = document.createElement('span'); sw.className='swatch-sm'; sw.style.background = itemColor(idx); row.appendChild(sw);
     const idEl = document.createElement('span'); idEl.className='idtxt'; idEl.textContent=it.id; row.appendChild(idEl);
-    const dimEl = document.createElement('span');
-    dimEl.className = 'dimtxt code';
+    const dimEl = document.createElement('span'); dimEl.className='dimtxt code';
     const recvTxt = it.receivedBy ? ` · ${it.receivedBy}${it.receivedDate?' '+it.receivedDate:''}` : '';
     const axisTxt = (axis === 'depth') ? ' [behind]' : ' [on top]';
     dimEl.textContent = `${it.w}×${it.h}×${it.d}cm${axisTxt}${recvTxt}`;
     row.appendChild(dimEl);
-
     const rm = document.createElement('button'); rm.className='rm'; rm.type='button'; rm.textContent='✕';
     rm.addEventListener('click', () => {
       const removedBy = prompt(`Who is removing "${it.id}" from this bin?`, '');
-      if (removedBy === null) return; // cancelled — keep the item
+      if (removedBy === null) return;
       const today = new Date().toISOString().slice(0,10);
       const removedDate = prompt('Removal date (YYYY-MM-DD):', today) || today;
       draftHistory.push({ ...it, removedBy: removedBy.trim() || 'Unknown', removedDate });
       draftItems.splice(idx,1);
-      renderItemList(); renderViz();
+      renderItemList();
     });
     row.appendChild(rm);
     wrap.appendChild(row);
@@ -805,7 +727,6 @@ function renderItemList() {
   if (draftItems.length===0) wrap.innerHTML = '<div style="font-size:0.78rem; color:var(--steel-soft);">No items yet — add one below.</div>';
   renderHistorySection();
 }
-
 function renderHistorySection() {
   const wrap = document.getElementById('historySection');
   if (!draftHistory || draftHistory.length === 0) { wrap.innerHTML = ''; return; }
@@ -815,6 +736,45 @@ function renderHistorySection() {
   });
   wrap.innerHTML = html;
 }
+
+function openBinPanel(rackId, level, binIdx, isSkid) {
+  activeRackId = rackId; activeLevel = level; activeBinIdx = binIdx; activeIsSkid = isSkid;
+  const rack = racks.find(r => r.id === rackId);
+  const key = binStateKey(level, binIdx);
+  if (!binState[rackId]) binState[rackId] = {};
+  const data = binState[rackId][key];
+
+  document.getElementById('panelTitle').textContent = isSkid ? 'Skid slot' : 'Bin — multiple items allowed';
+  document.getElementById('panelLoc').textContent = `${rack.name} — Level ${level}, Bin ${binIdx}`;
+
+  if (isSkid) {
+    const slotH = rack.levels[level-1].height;
+    document.getElementById('slotRef').innerHTML = `Slot clear height: <b>${slotH} cm</b> (one skid per level)`;
+  } else {
+    const slot = getSlotForBin(rack, level);
+    document.getElementById('slotRef').innerHTML = `Slot size: <b>${slot.w.toFixed(0)} × ${slot.h} × ${slot.d} cm</b> (W × H × D)`;
+  }
+
+  document.getElementById('skidFields').style.display = isSkid ? 'block' : 'none';
+  document.getElementById('smallBoxFields').style.display = isSkid ? 'none' : 'block';
+
+  if (isSkid) {
+    document.getElementById('skidId').value = data ? data.id : '';
+    document.getElementById('skidH').value = data ? data.h : '';
+    document.getElementById('skidRecvBy').value = data ? (data.receivedBy||'') : '';
+    document.getElementById('skidRecvDate').value = data ? (data.receivedDate||'') : '';
+  } else {
+    draftItems = (data && data.items) ? data.items.map(x=>({...x})) : [];
+    draftHistory = (data && data.history) ? data.history.map(x=>({...x})) : [];
+    document.getElementById('newId').value=''; document.getElementById('newW').value='';
+    document.getElementById('newH').value=''; document.getElementById('newD').value='';
+    document.getElementById('newRecvBy').value=''; document.getElementById('newRecvDate').value='';
+    document.getElementById('addItemError').textContent = '';
+    renderItemList();
+  }
+  document.getElementById('overlay').classList.add('show');
+}
+function closeBinPanel() { document.getElementById('overlay').classList.remove('show'); }
 
 document.getElementById('btnAddItem').addEventListener('click', () => {
   const id = document.getElementById('newId').value.trim();
@@ -827,168 +787,70 @@ document.getElementById('btnAddItem').addEventListener('click', () => {
   const errEl = document.getElementById('addItemError');
   if (!id||!w||!h||!d) { errEl.textContent = 'Fill in Box ID, W, H, and D before adding.'; return; }
 
+  const rack = racks.find(r => r.id === activeRackId);
+  const slot = getSlotForBin(rack, activeLevel);
   const candidate = {id,w,h,d,stackAxis,receivedBy,receivedDate};
-  const slot = smallSlotFor(activeRackKey, activeLevel);
   const tentative = [...draftItems, candidate];
   const st = smallBoxBinStats(tentative, slot);
   if (st.overH || st.overD || st.overW) {
     const axes = [st.overH?'height':null, st.overD?'depth':null, st.overW?'width':null].filter(Boolean).join(', ');
     errEl.textContent = `Doesn't fit (overflow on: ${axes}). Slot is ${slot.w.toFixed(0)}×${slot.h}×${slot.d}cm. Try "Behind" instead of "On top", or reduce the size — your entries are kept.`;
-    return; // do NOT add, do NOT clear fields
+    return;
   }
-
   errEl.textContent = '';
   draftItems.push(candidate);
   document.getElementById('newId').value=''; document.getElementById('newW').value='';
   document.getElementById('newH').value=''; document.getElementById('newD').value='';
   document.getElementById('newRecvBy').value=''; document.getElementById('newRecvDate').value='';
-  renderItemList(); renderViz();
+  renderItemList();
 });
 
-function renderViz() {
-  const container = document.getElementById('vizContainer');
-  const statRow = document.getElementById('statRow');
-  if (activeIsSkid) {
-    const slotH = skidSlotHFor(activeRackKey, activeLevel);
-    const h = parseFloat(document.getElementById('skidH').value) || 0;
-    const maxPx = 160;
-    const frame = document.createElement('div');
-    frame.className='viz-frame'; frame.style.width='90px'; frame.style.height=maxPx+'px'; frame.style.margin='0 auto';
-    const usedPct = Math.min(100,(h/slotH)*100);
-    const fill = document.createElement('div'); fill.className='viz-skid-fill'; fill.style.height=usedPct+'%'; frame.appendChild(fill);
-    if (usedPct<100) { const dead=document.createElement('div'); dead.className='viz-skid-dead'; dead.style.height=(100-usedPct)+'%'; frame.appendChild(dead); }
-    container.innerHTML=''; container.appendChild(frame);
-    const st = skidStats({h}, slotH);
-    statRow.innerHTML = `<span>Height: <span class="ok">${Math.min(h,slotH)}/${slotH}cm</span></span><span class="${st.deadH>0?'warn':'ok'}">Dead: ${st.deadH}cm</span>`;
-    if (st.oversized) statRow.innerHTML += `<br><span class="warn">⚠ Taller than clear height!</span>`;
-  } else {
-    const slot = smallSlotFor(activeRackKey, activeLevel);
-    const maxPx = 130;
-    const scale = maxPx/slot.h;
-    const outer = document.createElement('div');
-    outer.style.cssText = 'display:flex; gap:14px; justify-content:center; align-items:flex-start;';
-
-    const heightItems = draftItems.map((it,i)=>({it,i})).filter(o => (o.it.stackAxis||'height') === 'height');
-    const depthItems = draftItems.map((it,i)=>({it,i})).filter(o => o.it.stackAxis === 'depth');
-
-    function makeColumn(list, labelTxt) {
-      const col = document.createElement('div');
-      col.style.textAlign = 'center';
-      const frame = document.createElement('div');
-      frame.className='viz-frame';
-      frame.style.width=(slot.w*scale*0.6)+'px'; frame.style.height=(slot.h*scale)+'px'; frame.style.margin='0 auto';
-      list.forEach(({it,i}) => {
-        const band=document.createElement('div'); band.className='viz-band';
-        band.style.height = Math.min(it.h,slot.h)*scale+'px';
-        band.style.width = '100%';
-        band.style.background = itemColor(i);
-        band.style.opacity='0.9'; band.textContent=it.id;
-        frame.appendChild(band);
-      });
-      col.appendChild(frame);
-      const lbl = document.createElement('div');
-      lbl.style.cssText = 'font-size:0.66rem; color:var(--steel-soft); margin-top:4px;';
-      lbl.textContent = labelTxt;
-      col.appendChild(lbl);
-      return col;
-    }
-
-    outer.appendChild(makeColumn(heightItems, 'Front \u2014 top of list = topmost box'));
-    if (depthItems.length > 0) outer.appendChild(makeColumn(depthItems, 'Behind \u2014 top of list = closest to front'));
-
-    container.innerHTML=''; container.appendChild(outer);
-    const st = smallBoxBinStats(draftItems, slot);
-    statRow.innerHTML = `<span>Volume used: <span class="ok">${st.usedPct}%</span></span>`+
-      `<span class="${st.overH?'warn':'ok'}">H: ${st.sumH}/${slot.h}cm (dead ${st.deadH})</span>`+
-      `<span class="${st.overD?'warn':'ok'}">D: ${st.sumD}/${slot.d}cm (dead ${st.deadD})</span>`+
-      `<span class="${st.overW?'warn':'ok'}">W widest: ${st.maxW}/${slot.w.toFixed(0)}cm (dead ${st.deadW.toFixed(0)})</span>`;
-    if (st.overH||st.overD||st.overW) statRow.innerHTML += `<br><span class="warn">⚠ These items don't fit \u2014 you won't be able to save until this is fixed.</span>`;
-  }
-}
-
-document.getElementById('skidH').addEventListener('input', renderViz);
-document.getElementById('btnCancel').addEventListener('click', closePanel);
-document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closePanel(); });
+document.getElementById('btnCancel').addEventListener('click', closeBinPanel);
+document.getElementById('overlay').addEventListener('click', (e) => { if (e.target.id==='overlay') closeBinPanel(); });
 document.getElementById('btnSave').addEventListener('click', () => {
-  if (!activeBinId) return;
+  if (!activeRackId) return;
+  const rack = racks.find(r => r.id === activeRackId);
+  const key = binStateKey(activeLevel, activeBinIdx);
+  if (!binState[activeRackId]) binState[activeRackId] = {};
+
   if (activeIsSkid) {
     const id = document.getElementById('skidId').value.trim();
     const h = parseFloat(document.getElementById('skidH').value)||0;
     const receivedBy = document.getElementById('skidRecvBy').value.trim();
     const receivedDate = document.getElementById('skidRecvDate').value;
-    const slotH = skidSlotHFor(activeRackKey, activeLevel);
-    if (h > slotH) {
-      alert(`This skid (${h}cm) doesn't fit \u2014 the slot's clear height is only ${slotH}cm. Reduce the height or choose a different slot before saving.`);
-      return;
-    }
-    if (id && h>0) state[activeBinId]={id,h,receivedBy,receivedDate}; else delete state[activeBinId];
+    const slotH = rack.levels[activeLevel-1].height;
+    if (h > slotH) { alert(`This skid (${h}cm) doesn't fit \u2014 the slot's clear height is only ${slotH}cm.`); return; }
+    if (id && h>0) binState[activeRackId][key] = {id,h,receivedBy,receivedDate};
+    else delete binState[activeRackId][key];
   } else {
-    // overflow is already prevented at Add-time, but double-check in case items were reordered/edited
-    const slot = smallSlotFor(activeRackKey, activeLevel);
+    const slot = getSlotForBin(rack, activeLevel);
     if (draftItems.length > 0) {
       const st = smallBoxBinStats(draftItems, slot);
       if (st.overH || st.overD || st.overW) {
         const axes = [st.overH?'height':null, st.overD?'depth':null, st.overW?'width':null].filter(Boolean).join(', ');
-        alert(`These boxes don't fit in this slot (overflow on: ${axes}). Slot is ${slot.w.toFixed(0)}×${slot.h}×${slot.d}cm.`);
+        alert(`These boxes don't fit in this slot (overflow on: ${axes}).`);
         return;
       }
     }
     if (draftItems.length > 0 || draftHistory.length > 0) {
-      state[activeBinId] = { items: draftItems.map(x=>({...x})), history: draftHistory.map(x=>({...x})) };
+      binState[activeRackId][key] = { items: draftItems.map(x=>({...x})), history: draftHistory.map(x=>({...x})) };
     } else {
-      delete state[activeBinId];
+      delete binState[activeRackId][key];
     }
   }
-  closePanel(); renderGrid();
+  closeBinPanel();
+  rebuildScene();
 });
 document.getElementById('btnClearItem').addEventListener('click', () => {
   if (activeIsSkid) { document.getElementById('skidId').value=''; document.getElementById('skidH').value=''; }
   else { draftItems=[]; renderItemList(); }
-  renderViz();
 });
 
-function clearHighlights() { document.querySelectorAll('.bin').forEach(el=>el.classList.remove('hit','dimmed')); }
-
-function doSearch() {
-  const q = document.getElementById('search').value.trim().toUpperCase();
-  const msg = document.getElementById('searchMsg');
-  clearHighlights();
-  if (!q) { msg.textContent=''; msg.className=''; return; }
-  let matchKey=null, matchedItem=null;
-  if (state[q]) matchKey=q;
-  else {
-    for (const k of Object.keys(state)) {
-      const v=state[k];
-      if (v.id && v.id.toUpperCase()===q) { matchKey=k; matchedItem=v; break; }
-      if (v.items) { const f=v.items.find(it=>it.id.toUpperCase()===q); if (f) { matchKey=k; matchedItem=f; break; } }
-    }
-  }
-  const allBins = document.querySelectorAll('.bin');
-  if (matchKey) {
-    const rack = rackOfKey(matchKey);
-    const lvl = levelOfKey(matchKey);
-    const skid = isSkidLevel(rack, lvl);
-    allBins.forEach(el=>el.classList.add(el.dataset.bin===matchKey?'hit':'dimmed'));
-    if (skid) {
-      const item = state[matchKey]; const slotH = skidSlotHFor(rack,lvl); const st = skidStats(item,slotH);
-      msg.textContent = `Found "${q}" in skid slot ${matchKey} — height ${item.h}/${slotH}cm, ${st.deadH}cm dead space above.`;
-    } else {
-      const bin = state[matchKey]; const it = matchedItem || bin.items[0];
-      msg.textContent = `Found "${q}" in bin ${matchKey} (${bin.items.length} item(s) here) — this item is ${it.w}×${it.h}×${it.d}cm.`;
-    }
-    msg.className='found';
-  } else {
-    const isBinFormat = /^[A-D]-\d+-\d{2}$/.test(q);
-    if (isBinFormat) { allBins.forEach(el=>el.classList.add(el.dataset.bin===q?'hit':'dimmed')); msg.textContent=`${q} exists and is currently empty.`; msg.className='empty-hit'; }
-    else { msg.textContent = `No SKU or bin matching "${q}" was found.`; msg.className='notfound'; }
-  }
-}
-document.getElementById('searchBtn').addEventListener('click', doSearch);
-document.getElementById('search').addEventListener('keydown',(e)=>{ if(e.key==='Enter') doSearch(); });
-document.getElementById('clearBtn').addEventListener('click', () => {
-  document.getElementById('search').value=''; document.getElementById('searchMsg').textContent='';
-  document.getElementById('searchMsg').className=''; clearHighlights();
-});
+// ================= RENDER LOOP =================
+function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+resizeRenderer();
+animate();
+renderSidebar();
 </script>
 </body>
 </html>
