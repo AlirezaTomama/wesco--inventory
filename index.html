@@ -247,6 +247,11 @@
     <div id="skidFields" style="display:none;">
       <div class="field"><label for="skidId">Skid SKU / ID</label><input id="skidId" type="text" placeholder="e.g. PLT-7001"></div>
       <div class="field"><label for="skidH">Skid height (cm)</label><input id="skidH" type="number" min="1" placeholder="e.g. 110"></div>
+      <div class="dims3" style="grid-template-columns: 1fr 1.3fr 1fr;">
+        <div class="field"><label for="skidQty">Qty</label><input id="skidQty" type="number" min="1" value="1"></div>
+        <div class="field"><label for="skidRecvBy">Received by</label><input id="skidRecvBy" type="text" placeholder="Name"></div>
+        <div class="field"><label for="skidRecvDate">Date</label><input id="skidRecvDate" type="date"></div>
+      </div>
     </div>
 
     <div id="smallBoxFields">
@@ -258,6 +263,17 @@
         <div><label>H (cm)</label><input id="newH" type="number" min="1"></div>
         <div><label>D (cm)</label><input id="newD" type="number" min="1"></div>
         <button class="btn-add" id="btnAddItem" type="button">+ Add</button>
+      </div>
+      <div class="add-item-row" style="grid-template-columns: 1.2fr 1fr 1.3fr 1fr;">
+        <div><label>Stack</label>
+          <select id="newStackAxis">
+            <option value="height">On top (stacks up)</option>
+            <option value="depth">Behind (stacks back)</option>
+          </select>
+        </div>
+        <div><label>Qty</label><input id="newQty" type="number" min="1" value="1"></div>
+        <div><label>Received by</label><input id="newRecvBy" type="text" placeholder="Name"></div>
+        <div><label>Date</label><input id="newRecvDate" type="date"></div>
       </div>
     </div>
 
@@ -447,15 +463,20 @@ document.getElementById('btnAddLevel').addEventListener('click', () => {
 
 ['rackW','rackD','rackH'].forEach(id => document.getElementById(id).addEventListener('input', updateHeightMeter));
 
+let hasBuiltOnce = false;
 document.getElementById('btnBuild').addEventListener('click', () => {
   document.getElementById('setupScreen').classList.add('hidden');
   document.getElementById('mainScreen').classList.remove('hidden');
   document.getElementById('searchBlock').classList.remove('hidden');
   document.getElementById('headerSubtitle').textContent = 'Stack multiple boxes per bin \u00b7 enter real dimensions to see dead space';
-  initState();
+  if (!hasBuiltOnce) {
+    initState();
+    hasBuiltOnce = true;
+  }
+  // on later builds (after going back to edit setup), keep whatever the user already entered
   renderGrid();
   document.getElementById('footerText').textContent =
-    'Prototype — data resets on page reload. Each rack (A–D) uses its own configured dimensions and level plan.';
+    'Prototype — data resets on page reload. Each rack uses its own configured dimensions and level plan. Your entered items are kept if you go back and adjust the setup.';
 });
 
 document.getElementById('editSetupBtn').addEventListener('click', () => {
@@ -507,8 +528,22 @@ function smallBoxBinStats(items, slot) {
   const slotVol = slot.w*slot.h*slot.d;
   const usedVol = items.reduce((s,it)=>s+it.w*it.h*it.d,0);
   const usedPct = Math.min(100, Math.round((usedVol/slotVol)*100));
-  const sumH = items.reduce((s,it)=>s+it.h,0);
-  const sumD = items.reduce((s,it)=>s+it.d,0);
+
+  const heightItems = items.filter(it => (it.stackAxis||'height') === 'height');
+  const depthItems = items.filter(it => it.stackAxis === 'depth');
+
+  // height-stacked items sum their heights (a column); depth-stacked items sit beside that column
+  // and only their own height competes for vertical space (they don't add to the column's height).
+  const sumHeightCol = heightItems.reduce((s,it)=>s+it.h,0);
+  const maxDepthItemH = depthItems.reduce((m,it)=>Math.max(m,it.h),0);
+  const sumH = Math.max(sumHeightCol, maxDepthItemH);
+
+  // depth-stacked items sum their depths (going back); height-stacked items sit at the front
+  // and only their own depth competes (they don't add to the depth chain).
+  const sumDepthChain = depthItems.reduce((s,it)=>s+it.d,0);
+  const maxHeightItemD = heightItems.reduce((m,it)=>Math.max(m,it.d),0);
+  const sumD = Math.max(sumDepthChain, maxHeightItemD);
+
   const maxW = items.reduce((m,it)=>Math.max(m,it.w),0);
   return { usedPct, deadH: Math.max(0,slot.h-sumH), deadD: Math.max(0,slot.d-sumD), deadW: Math.max(0,slot.w-maxW),
     overH: sumH>slot.h, overD: sumD>slot.d, overW: maxW>slot.w, sumH, sumD, maxW };
@@ -632,17 +667,24 @@ function renderGrid() {
         tip.className = 'tip code';
         if (skid) {
           const slotH = skidSlotHFor(rack,l);
-          tip.textContent = item
-            ? `${key} — ${item.id} | H ${item.h}/${slotH}cm | dead ${skidStats(item,slotH).deadH}cm${skidStats(item,slotH).oversized?' OVERSIZED':''}`
-            : `${key} — empty (${slotH}cm clear height)`;
+          if (item) {
+            const st = skidStats(item,slotH);
+            const recv = item.receivedBy ? `Recv: ${item.receivedBy}${item.receivedDate?' ('+item.receivedDate+')':''}` : 'Recv: —';
+            tip.textContent = `${key} — ${item.id} ×${item.qty||1}\n${recv}\nH ${item.h}/${slotH}cm | dead ${st.deadH}cm${st.oversized?' OVERSIZED':''}\nClick for more info`;
+          } else {
+            tip.textContent = `${key} — empty (${slotH}cm clear height)\nClick for more info`;
+          }
         } else if (hasContent) {
           const slot = smallSlotFor(rack,l);
           const st = smallBoxBinStats(item.items, slot);
-          const lines = item.items.map(it=>`${it.id} ${it.w}×${it.h}×${it.d}cm`).join('\n');
-          tip.textContent = `${key} — ${item.items.length} item(s)\n${lines}\n${st.usedPct}% vol used | dead H${st.deadH} D${st.deadD} W${st.deadW}cm${(st.overH||st.overD||st.overW)?'\n⚠ OVERFLOW':''}`;
+          const lines = item.items.map(it => {
+            const recv = it.receivedBy ? `${it.receivedBy}${it.receivedDate?' '+it.receivedDate:''}` : 'no recv info';
+            return `${it.id} ×${it.qty||1} — ${it.w}×${it.h}×${it.d}cm — ${recv}`;
+          }).join('\n');
+          tip.textContent = `${key} — ${item.items.length} item(s)\n${lines}\n${st.usedPct}% vol used | dead H${st.deadH} D${st.deadD} W${st.deadW}cm${(st.overH||st.overD||st.overW)?'\n⚠ OVERFLOW':''}\nClick for more info`;
         } else {
           const slot = smallSlotFor(rack,l);
-          tip.textContent = `${key} — empty (${slot.w.toFixed(0)}×${slot.h}×${slot.d}cm slot)`;
+          tip.textContent = `${key} — empty (${slot.w.toFixed(0)}×${slot.h}×${slot.d}cm slot)\nClick for more info`;
         }
         binEl.appendChild(tip);
         binEl.addEventListener('click', () => openPanel(key, skid, rack, l));
@@ -676,10 +718,15 @@ function openPanel(key, skid, rack, level) {
   if (skid) {
     document.getElementById('skidId').value = item ? item.id : '';
     document.getElementById('skidH').value = item ? item.h : '';
+    document.getElementById('skidQty').value = item ? (item.qty || 1) : 1;
+    document.getElementById('skidRecvBy').value = item ? (item.receivedBy || '') : '';
+    document.getElementById('skidRecvDate').value = item ? (item.receivedDate || '') : '';
   } else {
     draftItems = (item && item.items) ? item.items.map(x=>({...x})) : [];
     document.getElementById('newId').value=''; document.getElementById('newW').value='';
     document.getElementById('newH').value=''; document.getElementById('newD').value='';
+    document.getElementById('newQty').value='1'; document.getElementById('newRecvBy').value='';
+    document.getElementById('newRecvDate').value='';
     renderItemList();
   }
   renderViz();
@@ -694,7 +741,12 @@ function renderItemList() {
     const row = document.createElement('div'); row.className='item-row';
     const sw = document.createElement('span'); sw.className='swatch-sm'; sw.style.background = idx%2===0?'var(--occupied)':'var(--occupied2)'; row.appendChild(sw);
     const idEl = document.createElement('span'); idEl.className='idtxt'; idEl.textContent=it.id; row.appendChild(idEl);
-    const dimEl = document.createElement('span'); dimEl.className='dimtxt code'; dimEl.textContent=`${it.w}×${it.h}×${it.d}cm`; row.appendChild(dimEl);
+    const dimEl = document.createElement('span');
+    dimEl.className = 'dimtxt code';
+    const recvTxt = it.receivedBy ? ` · ${it.receivedBy}${it.receivedDate?' '+it.receivedDate:''}` : '';
+    const axisTxt = (it.stackAxis === 'depth') ? ' [behind]' : ' [on top]';
+    dimEl.textContent = `×${it.qty||1} ${it.w}×${it.h}×${it.d}cm${axisTxt}${recvTxt}`;
+    row.appendChild(dimEl);
     const rm = document.createElement('button'); rm.className='rm'; rm.type='button'; rm.textContent='✕';
     rm.addEventListener('click', () => { draftItems.splice(idx,1); renderItemList(); renderViz(); });
     row.appendChild(rm);
@@ -708,10 +760,16 @@ document.getElementById('btnAddItem').addEventListener('click', () => {
   const w = parseFloat(document.getElementById('newW').value)||0;
   const h = parseFloat(document.getElementById('newH').value)||0;
   const d = parseFloat(document.getElementById('newD').value)||0;
+  const stackAxis = document.getElementById('newStackAxis').value;
+  const qty = parseInt(document.getElementById('newQty').value,10) || 1;
+  const receivedBy = document.getElementById('newRecvBy').value.trim();
+  const receivedDate = document.getElementById('newRecvDate').value;
   if (!id||!w||!h||!d) return;
-  draftItems.push({id,w,h,d});
+  draftItems.push({id,w,h,d,stackAxis,qty,receivedBy,receivedDate});
   document.getElementById('newId').value=''; document.getElementById('newW').value='';
   document.getElementById('newH').value=''; document.getElementById('newD').value='';
+  document.getElementById('newQty').value='1'; document.getElementById('newRecvBy').value='';
+  document.getElementById('newRecvDate').value='';
   renderItemList(); renderViz();
 });
 
@@ -735,23 +793,44 @@ function renderViz() {
     const slot = smallSlotFor(activeRackKey, activeLevel);
     const maxPx = 130;
     const scale = maxPx/slot.h;
-    const frame = document.createElement('div');
-    frame.className='viz-frame'; frame.style.width=(slot.w*scale)+'px'; frame.style.height=(slot.h*scale)+'px'; frame.style.margin='0 auto';
-    draftItems.forEach((it,idx)=>{
-      const band=document.createElement('div'); band.className='viz-band';
-      band.style.height = Math.min(it.h,slot.h)*scale+'px';
-      band.style.width = Math.min(it.w,slot.w)*scale+'px';
-      band.style.background = idx%2===0?'var(--occupied)':'var(--occupied2)';
-      band.style.opacity='0.85'; band.style.margin='0 auto'; band.textContent=it.id;
-      frame.appendChild(band);
-    });
-    container.innerHTML=''; container.appendChild(frame);
+    const outer = document.createElement('div');
+    outer.style.cssText = 'display:flex; gap:14px; justify-content:center; align-items:flex-end;';
+
+    const heightItems = draftItems.filter(it => (it.stackAxis||'height') === 'height');
+    const depthItems = draftItems.filter(it => it.stackAxis === 'depth');
+
+    function makeColumn(list, labelTxt) {
+      const col = document.createElement('div');
+      col.style.textAlign = 'center';
+      const frame = document.createElement('div');
+      frame.className='viz-frame';
+      frame.style.width=(slot.w*scale*0.6)+'px'; frame.style.height=(slot.h*scale)+'px'; frame.style.margin='0 auto';
+      list.forEach((it,idx)=>{
+        const band=document.createElement('div'); band.className='viz-band';
+        band.style.height = Math.min(it.h,slot.h)*scale+'px';
+        band.style.width = '100%';
+        band.style.background = idx%2===0?'var(--occupied)':'var(--occupied2)';
+        band.style.opacity='0.85'; band.textContent=it.id;
+        frame.appendChild(band);
+      });
+      col.appendChild(frame);
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:0.66rem; color:var(--steel-soft); margin-top:4px;';
+      lbl.textContent = labelTxt;
+      col.appendChild(lbl);
+      return col;
+    }
+
+    outer.appendChild(makeColumn(heightItems, 'Front (stacked up)'));
+    if (depthItems.length > 0) outer.appendChild(makeColumn(depthItems, 'Behind (stacked back)'));
+
+    container.innerHTML=''; container.appendChild(outer);
     const st = smallBoxBinStats(draftItems, slot);
     statRow.innerHTML = `<span>Volume used: <span class="ok">${st.usedPct}%</span></span>`+
       `<span class="${st.overH?'warn':'ok'}">H: ${st.sumH}/${slot.h}cm (dead ${st.deadH})</span>`+
       `<span class="${st.overD?'warn':'ok'}">D: ${st.sumD}/${slot.d}cm (dead ${st.deadD})</span>`+
       `<span class="${st.overW?'warn':'ok'}">W widest: ${st.maxW}/${slot.w.toFixed(0)}cm (dead ${st.deadW.toFixed(0)})</span>`;
-    if (st.overH||st.overD||st.overW) statRow.innerHTML += `<br><span class="warn">⚠ Stacked items overflow the slot on at least one axis!</span>`;
+    if (st.overH||st.overD||st.overW) statRow.innerHTML += `<br><span class="warn">⚠ These items don't fit \u2014 you won't be able to save until this is fixed.</span>`;
   }
 }
 
@@ -763,10 +842,28 @@ document.getElementById('btnSave').addEventListener('click', () => {
   if (activeIsSkid) {
     const id = document.getElementById('skidId').value.trim();
     const h = parseFloat(document.getElementById('skidH').value)||0;
-    if (id && h>0) state[activeBinId]={id,h}; else delete state[activeBinId];
+    const qty = parseInt(document.getElementById('skidQty').value,10) || 1;
+    const receivedBy = document.getElementById('skidRecvBy').value.trim();
+    const receivedDate = document.getElementById('skidRecvDate').value;
+    const slotH = skidSlotHFor(activeRackKey, activeLevel);
+    if (h > slotH) {
+      alert(`This skid (${h}cm) doesn't fit \u2014 the slot's clear height is only ${slotH}cm. Reduce the height or choose a different slot before saving.`);
+      return;
+    }
+    if (id && h>0) state[activeBinId]={id,h,qty,receivedBy,receivedDate}; else delete state[activeBinId];
   } else {
-    if (draftItems.length>0) state[activeBinId] = { items: draftItems.map(x=>({...x})) };
-    else delete state[activeBinId];
+    if (draftItems.length>0) {
+      const slot = smallSlotFor(activeRackKey, activeLevel);
+      const st = smallBoxBinStats(draftItems, slot);
+      if (st.overH || st.overD || st.overW) {
+        const axes = [st.overH?'height':null, st.overD?'depth':null, st.overW?'width':null].filter(Boolean).join(', ');
+        alert(`These boxes don't fit in this slot (overflow on: ${axes}). Slot is ${slot.w.toFixed(0)}×${slot.h}×${slot.d}cm. Remove or resize an item, or change its stack direction, before saving.`);
+        return;
+      }
+      state[activeBinId] = { items: draftItems.map(x=>({...x})) };
+    } else {
+      delete state[activeBinId];
+    }
   }
   closePanel(); renderGrid();
 });
