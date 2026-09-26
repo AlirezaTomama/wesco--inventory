@@ -100,13 +100,11 @@
   .level-label .tag { color:var(--amber-dark); font-weight:700; }
   .bins { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
   .bins.skid-row { grid-template-columns:1fr; }
-  .bin { border:1.5px solid var(--steel-soft); border-radius:2px; position:relative; cursor:pointer; background:var(--empty-fill); transition:transform .12s ease, box-shadow .12s ease, opacity .25s ease; overflow:hidden; display:flex; flex-direction:column-reverse; }
+  .bin { border:1.5px solid var(--steel-soft); border-radius:2px; position:relative; cursor:pointer; background:var(--empty-fill); transition:transform .12s ease, box-shadow .12s ease, opacity .25s ease; overflow:hidden; display:flex; flex-direction:column; }
   .bin.skid { flex-direction:row; }
   .bin:hover { transform:scale(1.05); z-index:2; }
   .bin.occupied { border-color:var(--occupied); }
-  .stackband { width:100%; border-top:1.5px solid var(--panel); flex-shrink:0; }
-  .stackband:nth-child(odd) { background:var(--occupied-fill); }
-  .stackband:nth-child(even) { background:var(--occupied2-fill); }
+  .stackband { width:100%; border-top:1.5px solid var(--panel); flex-shrink:0; opacity:0.55; }
   .skid-fill { height:100%; background:var(--occupied-fill); border-right:2px solid var(--occupied); flex-shrink:0; }
   .skid-dead { height:100%; background:repeating-linear-gradient(45deg,var(--dead-fill),var(--dead-fill) 4px,transparent 4px,transparent 8px); }
   .bin .tip { position:absolute; bottom:100%; left:50%; transform:translateX(-50%); background:var(--steel); color:var(--concrete); font-size:0.62rem; padding:3px 7px; border-radius:3px; white-space:pre-line; text-align:left; opacity:0; pointer-events:none; transition:opacity .1s; margin-bottom:4px; z-index:5; line-height:1.4; max-width:180px; }
@@ -131,6 +129,15 @@
   .item-row .idtxt { font-weight:700; flex:1; }
   .item-row .dimtxt { color:var(--steel-soft); }
   .item-row .rm { background:transparent; border:none; color:var(--highlight); cursor:pointer; font-size:1rem; padding:0 4px; }
+  .item-row .reorder { display:flex; flex-direction:column; gap:0; }
+  .item-row .reorder button { background:transparent; border:none; color:var(--steel-soft); cursor:pointer; font-size:0.6rem; line-height:1; padding:1px 3px; }
+  .item-row .reorder button:hover:not(:disabled) { color:var(--steel); }
+  .item-row .reorder button:disabled { opacity:0.25; cursor:default; }
+  .add-item-error { font-size:0.78rem; color:var(--highlight); font-weight:600; margin-top:6px; }
+  .history-section { margin-top:14px; border-top:1px dashed var(--line); padding-top:10px; }
+  .history-title { font-size:0.72rem; font-weight:700; color:var(--steel-soft); margin-bottom:6px; }
+  .history-row { display:flex; gap:8px; font-size:0.76rem; color:var(--steel-soft); background:var(--concrete-dark); border-radius:3px; padding:5px 9px; margin-bottom:4px; }
+  .history-row .idtxt { font-weight:700; text-decoration:line-through; }
   .add-item-row { display:grid; grid-template-columns: 1.4fr 1fr 1fr 1fr auto; gap:6px; align-items:end; margin-top:8px; }
   .add-item-row label { font-size:0.68rem; color:var(--steel-soft); display:block; margin-bottom:3px; }
   .add-item-row input { width:100%; font-family:inherit; font-size:0.85rem; padding:6px 7px; border:1.5px solid var(--steel-soft); border-radius:3px; }
@@ -139,7 +146,7 @@
   .stack-note { font-size:0.72rem; color:var(--steel-soft); margin: 2px 0 4px; }
   .viz-box { margin:14px 0; border:1.5px dashed var(--line); border-radius:4px; padding:10px; background:var(--concrete-dark); }
   .viz-label { font-size:0.7rem; color:var(--steel-soft); margin-bottom:8px; }
-  .viz-frame { position:relative; margin:0 auto; background:var(--panel); border:2px solid var(--steel-soft); border-radius:2px; overflow:hidden; display:flex; flex-direction:column-reverse; }
+  .viz-frame { position:relative; margin:0 auto; background:var(--panel); border:2px solid var(--steel-soft); border-radius:2px; overflow:hidden; display:flex; flex-direction:column; }
   .viz-band { width:100%; flex-shrink:0; border-top:1.5px solid var(--panel); display:flex; align-items:center; justify-content:center; font-size:0.6rem; color:#fff; overflow:hidden; }
   .viz-skid-fill { position:absolute; bottom:0; left:0; width:100%; background:var(--occupied-fill); border-top:2px solid var(--occupied); }
   .viz-skid-dead { position:absolute; top:0; left:0; width:100%; background:repeating-linear-gradient(45deg,var(--dead-fill),var(--dead-fill) 4px,transparent 4px,transparent 8px); }
@@ -247,8 +254,7 @@
     <div id="skidFields" style="display:none;">
       <div class="field"><label for="skidId">Skid SKU / ID</label><input id="skidId" type="text" placeholder="e.g. PLT-7001"></div>
       <div class="field"><label for="skidH">Skid height (cm)</label><input id="skidH" type="number" min="1" placeholder="e.g. 110"></div>
-      <div class="dims3" style="grid-template-columns: 1fr 1.3fr 1fr;">
-        <div class="field"><label for="skidQty">Qty</label><input id="skidQty" type="number" min="1" value="1"></div>
+      <div class="dims3" style="grid-template-columns: 1.3fr 1fr;">
         <div class="field"><label for="skidRecvBy">Received by</label><input id="skidRecvBy" type="text" placeholder="Name"></div>
         <div class="field"><label for="skidRecvDate">Date</label><input id="skidRecvDate" type="date"></div>
       </div>
@@ -264,17 +270,18 @@
         <div><label>D (cm)</label><input id="newD" type="number" min="1"></div>
         <button class="btn-add" id="btnAddItem" type="button">+ Add</button>
       </div>
-      <div class="add-item-row" style="grid-template-columns: 1.2fr 1fr 1.3fr 1fr;">
+      <div class="add-item-row" style="grid-template-columns: 1.2fr 1.3fr 1fr;">
         <div><label>Stack</label>
           <select id="newStackAxis">
             <option value="height">On top (stacks up)</option>
             <option value="depth">Behind (stacks back)</option>
           </select>
         </div>
-        <div><label>Qty</label><input id="newQty" type="number" min="1" value="1"></div>
         <div><label>Received by</label><input id="newRecvBy" type="text" placeholder="Name"></div>
         <div><label>Date</label><input id="newRecvDate" type="date"></div>
       </div>
+      <div class="add-item-error" id="addItemError"></div>
+      <div class="history-section" id="historySection"></div>
     </div>
 
     <div class="viz-box">
@@ -494,6 +501,7 @@ let state = {};
 let activeBinId = null;
 let activeIsSkid = false;
 let draftItems = [];
+let draftHistory = [];
 let activeRackKey = null;
 let activeLevel = null;
 
@@ -506,6 +514,10 @@ function skidSlotHFor(rack, levelIdx1based) { return levelHeight(rack, levelIdx1
 function binKey(rack, level, bin) { return `${rack}-${level}-${String(bin).padStart(2,'0')}`; }
 function levelOfKey(key) { return parseInt(key.split('-')[1], 10); }
 function rackOfKey(key) { return key.split('-')[0]; }
+
+// Distinct color per item (not just 2 alternating colors) — cycles through palette if more items than colors
+const ITEM_COLORS = ['#4C7A5E','#3D6B93','#B5731E','#8B4F9E','#A13D3D','#3D8B8B','#6B8B3D','#9E5C8B','#3D5C9E','#9E8B3D','#5C3D9E','#3D9E6B','#C4177C','#556B2F','#4682B4'];
+function itemColor(idx) { return ITEM_COLORS[idx % ITEM_COLORS.length]; }
 
 function initState() {
   state = {};
@@ -660,7 +672,7 @@ function renderGrid() {
           if (st.deadH>0) { const dead=document.createElement('div'); dead.className='skid-dead'; dead.style.width=(100-st.usedPct)+'%'; dead.style.flexShrink='0'; binEl.appendChild(dead); }
         } else if (!skid && hasContent) {
           const slot = smallSlotFor(rack,l);
-          item.items.forEach(it => { const band=document.createElement('div'); band.className='stackband'; band.style.height=Math.min(100,(it.h/slot.h)*100)+'%'; binEl.appendChild(band); });
+          item.items.forEach((it,idx) => { const band=document.createElement('div'); band.className='stackband'; band.style.height=Math.min(100,(it.h/slot.h)*100)+'%'; band.style.background=itemColor(idx); binEl.appendChild(band); });
         }
 
         const tip = document.createElement('div');
@@ -670,7 +682,7 @@ function renderGrid() {
           if (item) {
             const st = skidStats(item,slotH);
             const recv = item.receivedBy ? `Recv: ${item.receivedBy}${item.receivedDate?' ('+item.receivedDate+')':''}` : 'Recv: —';
-            tip.textContent = `${key} — ${item.id} ×${item.qty||1}\n${recv}\nH ${item.h}/${slotH}cm | dead ${st.deadH}cm${st.oversized?' OVERSIZED':''}\nClick for more info`;
+            tip.textContent = `${key} — ${item.id}\n${recv}\nH ${item.h}/${slotH}cm | dead ${st.deadH}cm${st.oversized?' OVERSIZED':''}\nClick for more info`;
           } else {
             tip.textContent = `${key} — empty (${slotH}cm clear height)\nClick for more info`;
           }
@@ -679,7 +691,7 @@ function renderGrid() {
           const st = smallBoxBinStats(item.items, slot);
           const lines = item.items.map(it => {
             const recv = it.receivedBy ? `${it.receivedBy}${it.receivedDate?' '+it.receivedDate:''}` : 'no recv info';
-            return `${it.id} ×${it.qty||1} — ${it.w}×${it.h}×${it.d}cm — ${recv}`;
+            return `${it.id} — ${it.w}×${it.h}×${it.d}cm — ${recv}`;
           }).join('\n');
           tip.textContent = `${key} — ${item.items.length} item(s)\n${lines}\n${st.usedPct}% vol used | dead H${st.deadH} D${st.deadD} W${st.deadW}cm${(st.overH||st.overD||st.overW)?'\n⚠ OVERFLOW':''}\nClick for more info`;
         } else {
@@ -718,15 +730,16 @@ function openPanel(key, skid, rack, level) {
   if (skid) {
     document.getElementById('skidId').value = item ? item.id : '';
     document.getElementById('skidH').value = item ? item.h : '';
-    document.getElementById('skidQty').value = item ? (item.qty || 1) : 1;
     document.getElementById('skidRecvBy').value = item ? (item.receivedBy || '') : '';
     document.getElementById('skidRecvDate').value = item ? (item.receivedDate || '') : '';
   } else {
     draftItems = (item && item.items) ? item.items.map(x=>({...x})) : [];
+    draftHistory = (item && item.history) ? item.history.map(x=>({...x})) : [];
     document.getElementById('newId').value=''; document.getElementById('newW').value='';
     document.getElementById('newH').value=''; document.getElementById('newD').value='';
-    document.getElementById('newQty').value='1'; document.getElementById('newRecvBy').value='';
+    document.getElementById('newRecvBy').value='';
     document.getElementById('newRecvDate').value='';
+    document.getElementById('addItemError').textContent = '';
     renderItemList();
   }
   renderViz();
@@ -734,25 +747,73 @@ function openPanel(key, skid, rack, level) {
 }
 function closePanel() { document.getElementById('overlay').classList.remove('show'); activeBinId=null; }
 
+function moveItemInAxis(idx, dir) {
+  const axis = draftItems[idx].stackAxis || 'height';
+  const sameAxisIdx = draftItems.map((it,i)=>({it,i})).filter(o => (o.it.stackAxis||'height')===axis).map(o=>o.i);
+  const pos = sameAxisIdx.indexOf(idx);
+  const swapPos = pos + dir;
+  if (swapPos < 0 || swapPos >= sameAxisIdx.length) return;
+  const otherIdx = sameAxisIdx[swapPos];
+  const tmp = draftItems[idx]; draftItems[idx] = draftItems[otherIdx]; draftItems[otherIdx] = tmp;
+  renderItemList(); renderViz();
+}
+
 function renderItemList() {
   const wrap = document.getElementById('itemList');
   wrap.innerHTML = '';
   draftItems.forEach((it, idx) => {
+    const axis = it.stackAxis || 'height';
+    const sameAxisIdx = draftItems.map((x,i)=>({x,i})).filter(o => (o.x.stackAxis||'height')===axis).map(o=>o.i);
+    const posInAxis = sameAxisIdx.indexOf(idx);
+
     const row = document.createElement('div'); row.className='item-row';
-    const sw = document.createElement('span'); sw.className='swatch-sm'; sw.style.background = idx%2===0?'var(--occupied)':'var(--occupied2)'; row.appendChild(sw);
+
+    const reorder = document.createElement('div'); reorder.className='reorder';
+    const up = document.createElement('button'); up.type='button'; up.textContent='▲';
+    up.disabled = posInAxis === 0;
+    up.title = 'Move up (closer to top of stack)';
+    up.addEventListener('click', () => moveItemInAxis(idx, -1));
+    const down = document.createElement('button'); down.type='button'; down.textContent='▼';
+    down.disabled = posInAxis === sameAxisIdx.length-1;
+    down.title = 'Move down';
+    down.addEventListener('click', () => moveItemInAxis(idx, 1));
+    reorder.appendChild(up); reorder.appendChild(down);
+    row.appendChild(reorder);
+
+    const sw = document.createElement('span'); sw.className='swatch-sm'; sw.style.background = itemColor(idx); row.appendChild(sw);
     const idEl = document.createElement('span'); idEl.className='idtxt'; idEl.textContent=it.id; row.appendChild(idEl);
     const dimEl = document.createElement('span');
     dimEl.className = 'dimtxt code';
     const recvTxt = it.receivedBy ? ` · ${it.receivedBy}${it.receivedDate?' '+it.receivedDate:''}` : '';
-    const axisTxt = (it.stackAxis === 'depth') ? ' [behind]' : ' [on top]';
-    dimEl.textContent = `×${it.qty||1} ${it.w}×${it.h}×${it.d}cm${axisTxt}${recvTxt}`;
+    const axisTxt = (axis === 'depth') ? ' [behind]' : ' [on top]';
+    dimEl.textContent = `${it.w}×${it.h}×${it.d}cm${axisTxt}${recvTxt}`;
     row.appendChild(dimEl);
+
     const rm = document.createElement('button'); rm.className='rm'; rm.type='button'; rm.textContent='✕';
-    rm.addEventListener('click', () => { draftItems.splice(idx,1); renderItemList(); renderViz(); });
+    rm.addEventListener('click', () => {
+      const removedBy = prompt(`Who is removing "${it.id}" from this bin?`, '');
+      if (removedBy === null) return; // cancelled — keep the item
+      const today = new Date().toISOString().slice(0,10);
+      const removedDate = prompt('Removal date (YYYY-MM-DD):', today) || today;
+      draftHistory.push({ ...it, removedBy: removedBy.trim() || 'Unknown', removedDate });
+      draftItems.splice(idx,1);
+      renderItemList(); renderViz();
+    });
     row.appendChild(rm);
     wrap.appendChild(row);
   });
   if (draftItems.length===0) wrap.innerHTML = '<div style="font-size:0.78rem; color:var(--steel-soft);">No items yet — add one below.</div>';
+  renderHistorySection();
+}
+
+function renderHistorySection() {
+  const wrap = document.getElementById('historySection');
+  if (!draftHistory || draftHistory.length === 0) { wrap.innerHTML = ''; return; }
+  let html = '<div class="history-title">Previously here (removed)</div>';
+  draftHistory.slice().reverse().forEach(h => {
+    html += `<div class="history-row"><span class="idtxt code">${h.id}</span><span>${h.w}×${h.h}×${h.d}cm</span><span>removed by ${h.removedBy} on ${h.removedDate}</span></div>`;
+  });
+  wrap.innerHTML = html;
 }
 
 document.getElementById('btnAddItem').addEventListener('click', () => {
@@ -761,15 +822,26 @@ document.getElementById('btnAddItem').addEventListener('click', () => {
   const h = parseFloat(document.getElementById('newH').value)||0;
   const d = parseFloat(document.getElementById('newD').value)||0;
   const stackAxis = document.getElementById('newStackAxis').value;
-  const qty = parseInt(document.getElementById('newQty').value,10) || 1;
   const receivedBy = document.getElementById('newRecvBy').value.trim();
   const receivedDate = document.getElementById('newRecvDate').value;
-  if (!id||!w||!h||!d) return;
-  draftItems.push({id,w,h,d,stackAxis,qty,receivedBy,receivedDate});
+  const errEl = document.getElementById('addItemError');
+  if (!id||!w||!h||!d) { errEl.textContent = 'Fill in Box ID, W, H, and D before adding.'; return; }
+
+  const candidate = {id,w,h,d,stackAxis,receivedBy,receivedDate};
+  const slot = smallSlotFor(activeRackKey, activeLevel);
+  const tentative = [...draftItems, candidate];
+  const st = smallBoxBinStats(tentative, slot);
+  if (st.overH || st.overD || st.overW) {
+    const axes = [st.overH?'height':null, st.overD?'depth':null, st.overW?'width':null].filter(Boolean).join(', ');
+    errEl.textContent = `Doesn't fit (overflow on: ${axes}). Slot is ${slot.w.toFixed(0)}×${slot.h}×${slot.d}cm. Try "Behind" instead of "On top", or reduce the size — your entries are kept.`;
+    return; // do NOT add, do NOT clear fields
+  }
+
+  errEl.textContent = '';
+  draftItems.push(candidate);
   document.getElementById('newId').value=''; document.getElementById('newW').value='';
   document.getElementById('newH').value=''; document.getElementById('newD').value='';
-  document.getElementById('newQty').value='1'; document.getElementById('newRecvBy').value='';
-  document.getElementById('newRecvDate').value='';
+  document.getElementById('newRecvBy').value=''; document.getElementById('newRecvDate').value='';
   renderItemList(); renderViz();
 });
 
@@ -794,10 +866,10 @@ function renderViz() {
     const maxPx = 130;
     const scale = maxPx/slot.h;
     const outer = document.createElement('div');
-    outer.style.cssText = 'display:flex; gap:14px; justify-content:center; align-items:flex-end;';
+    outer.style.cssText = 'display:flex; gap:14px; justify-content:center; align-items:flex-start;';
 
-    const heightItems = draftItems.filter(it => (it.stackAxis||'height') === 'height');
-    const depthItems = draftItems.filter(it => it.stackAxis === 'depth');
+    const heightItems = draftItems.map((it,i)=>({it,i})).filter(o => (o.it.stackAxis||'height') === 'height');
+    const depthItems = draftItems.map((it,i)=>({it,i})).filter(o => o.it.stackAxis === 'depth');
 
     function makeColumn(list, labelTxt) {
       const col = document.createElement('div');
@@ -805,12 +877,12 @@ function renderViz() {
       const frame = document.createElement('div');
       frame.className='viz-frame';
       frame.style.width=(slot.w*scale*0.6)+'px'; frame.style.height=(slot.h*scale)+'px'; frame.style.margin='0 auto';
-      list.forEach((it,idx)=>{
+      list.forEach(({it,i}) => {
         const band=document.createElement('div'); band.className='viz-band';
         band.style.height = Math.min(it.h,slot.h)*scale+'px';
         band.style.width = '100%';
-        band.style.background = idx%2===0?'var(--occupied)':'var(--occupied2)';
-        band.style.opacity='0.85'; band.textContent=it.id;
+        band.style.background = itemColor(i);
+        band.style.opacity='0.9'; band.textContent=it.id;
         frame.appendChild(band);
       });
       col.appendChild(frame);
@@ -821,8 +893,8 @@ function renderViz() {
       return col;
     }
 
-    outer.appendChild(makeColumn(heightItems, 'Front (stacked up)'));
-    if (depthItems.length > 0) outer.appendChild(makeColumn(depthItems, 'Behind (stacked back)'));
+    outer.appendChild(makeColumn(heightItems, 'Front \u2014 top of list = topmost box'));
+    if (depthItems.length > 0) outer.appendChild(makeColumn(depthItems, 'Behind \u2014 top of list = closest to front'));
 
     container.innerHTML=''; container.appendChild(outer);
     const st = smallBoxBinStats(draftItems, slot);
@@ -842,7 +914,6 @@ document.getElementById('btnSave').addEventListener('click', () => {
   if (activeIsSkid) {
     const id = document.getElementById('skidId').value.trim();
     const h = parseFloat(document.getElementById('skidH').value)||0;
-    const qty = parseInt(document.getElementById('skidQty').value,10) || 1;
     const receivedBy = document.getElementById('skidRecvBy').value.trim();
     const receivedDate = document.getElementById('skidRecvDate').value;
     const slotH = skidSlotHFor(activeRackKey, activeLevel);
@@ -850,17 +921,20 @@ document.getElementById('btnSave').addEventListener('click', () => {
       alert(`This skid (${h}cm) doesn't fit \u2014 the slot's clear height is only ${slotH}cm. Reduce the height or choose a different slot before saving.`);
       return;
     }
-    if (id && h>0) state[activeBinId]={id,h,qty,receivedBy,receivedDate}; else delete state[activeBinId];
+    if (id && h>0) state[activeBinId]={id,h,receivedBy,receivedDate}; else delete state[activeBinId];
   } else {
-    if (draftItems.length>0) {
-      const slot = smallSlotFor(activeRackKey, activeLevel);
+    // overflow is already prevented at Add-time, but double-check in case items were reordered/edited
+    const slot = smallSlotFor(activeRackKey, activeLevel);
+    if (draftItems.length > 0) {
       const st = smallBoxBinStats(draftItems, slot);
       if (st.overH || st.overD || st.overW) {
         const axes = [st.overH?'height':null, st.overD?'depth':null, st.overW?'width':null].filter(Boolean).join(', ');
-        alert(`These boxes don't fit in this slot (overflow on: ${axes}). Slot is ${slot.w.toFixed(0)}×${slot.h}×${slot.d}cm. Remove or resize an item, or change its stack direction, before saving.`);
+        alert(`These boxes don't fit in this slot (overflow on: ${axes}). Slot is ${slot.w.toFixed(0)}×${slot.h}×${slot.d}cm.`);
         return;
       }
-      state[activeBinId] = { items: draftItems.map(x=>({...x})) };
+    }
+    if (draftItems.length > 0 || draftHistory.length > 0) {
+      state[activeBinId] = { items: draftItems.map(x=>({...x})), history: draftHistory.map(x=>({...x})) };
     } else {
       delete state[activeBinId];
     }
